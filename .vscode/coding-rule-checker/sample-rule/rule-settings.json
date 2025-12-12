@@ -1,0 +1,23 @@
+{
+  "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
+  "templatesPath": ".vscode/coding-rule-checker/sample-rule/review-results-template.md",
+  "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
+  "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
+  },
+  "reviewIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  },
+  "falsePositiveCheckIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  }
+}

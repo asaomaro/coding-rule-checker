@@ -1,0 +1,12 @@
+{
+  "model": "copilot-gpt-4",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "rulesets": {
+    ".js": ["sample-rule"],
+    ".ts": ["sample-rule"],
+    ".jsx": ["sample-rule"],
+    ".tsx": ["sample-rule"],
+    ".py": ["sample-rule"]
+  }
+}

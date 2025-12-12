@@ -1,0 +1,49 @@
+# Node modules
+node_modules/
+extension/node_modules/
+
+# Build outputs
+extension/dist/
+extension/out/
+*.vsix
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/*
+!.vscode/coding-rule-checker/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Review results (optional - uncomment if you don't want to commit review outputs)
+# .vscode/coding-rule-checker/review-results/
