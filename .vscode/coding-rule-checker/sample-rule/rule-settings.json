@@ -1,0 +1,17 @@
+{
+  "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
+  "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
+  "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
+  "reviewIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  },
+  "falsePositiveCheckIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  }
+}
