@@ -95,6 +95,7 @@ export interface ReviewIssue {
   codeSnippet: string;
   reason: string;
   suggestion: string;
+  fixedCode?: string;
 }
 
 /**

@@ -157,7 +157,8 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
           lineNumber: issue.lineNumber || 0,
           codeSnippet: issue.codeSnippet || '',
           reason: issue.reason || '',
-          suggestion: issue.suggestion || ''
+          suggestion: issue.suggestion || '',
+          fixedCode: issue.fixedCode || undefined
         }));
       } else {
         console.log('[parseReviewResponse] JSON does not contain issues array');
@@ -172,7 +173,9 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
 
     for (const block of issueBlocks) {
       const lineMatch = block.match(/行番号[：:]\s*(\d+)/);
-      const snippetMatch = block.match(/```[\s\S]*?\n([\s\S]*?)\n```/);
+      const codeBlocks = block.match(/```[\s\S]*?\n([\s\S]*?)\n```/g);
+      const snippetMatch = codeBlocks && codeBlocks[0] ? codeBlocks[0].match(/```[\s\S]*?\n([\s\S]*?)\n```/) : null;
+      const fixedCodeMatch = codeBlocks && codeBlocks[1] ? codeBlocks[1].match(/```[\s\S]*?\n([\s\S]*?)\n```/) : null;
       const reasonMatch = block.match(/NG理由[：:]\s*([^\n]+)/);
       const suggestionMatch = block.match(/修正案[：:]\s*([^\n]+)/);
 
@@ -183,7 +186,8 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
           lineNumber: parseInt(lineMatch[1], 10),
           codeSnippet: snippetMatch ? snippetMatch[1].trim() : '',
           reason: reasonMatch ? reasonMatch[1].trim() : '',
-          suggestion: suggestionMatch ? suggestionMatch[1].trim() : ''
+          suggestion: suggestionMatch ? suggestionMatch[1].trim() : '',
+          fixedCode: fixedCodeMatch ? fixedCodeMatch[1].trim() : undefined
         });
       }
     }

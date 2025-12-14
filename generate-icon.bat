@@ -16,14 +16,14 @@ echo 2. Save the file as "icon.png" in the extension folder
 echo 3. Close the browser window when done
 echo.
 
-cd /d "%~dp0extension"
+cd /d "%~dp0"
 
 REM Open the HTML converter in default browser
 start convert-icon.html
 
 echo.
 echo Browser should open automatically.
-echo If not, manually open: extension\convert-icon.html
+echo If not, manually open: convert-icon.html
 echo.
 
 pause

@@ -12,7 +12,15 @@
       "Bash(git commit:*)",
       "WebSearch",
       "Bash(gh api:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(dir:*)",
+      "Bash(tar:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell -Command \"Expand-Archive -Path coding-rule-checker-0.1.0.vsix -DestinationPath vsix-extract -Force\")",
+      "Bash(copy coding-rule-checker-0.1.0.vsix coding-rule-checker-0.1.0.zip)",
+      "Bash(powershell -Command \"Expand-Archive -Path coding-rule-checker-0.1.0.zip -DestinationPath vsix-extract -Force\")",
+      "Bash(npm run generate-icons:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []

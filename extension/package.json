@@ -22,7 +22,7 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "*"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -51,7 +51,7 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
-    "generate-icons": "node generate-png-icon.js",
+    "generate-icons": "node ../generate-png-icon.js",
     "package": "vsce package"
   },
   "devDependencies": {

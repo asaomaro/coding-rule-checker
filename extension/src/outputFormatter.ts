@@ -17,6 +17,42 @@ function extractTemplateSection(template: string, startMarker: string, endMarker
 }
 
 /**
+ * Indents multi-line text to match the placeholder's indentation level
+ */
+function indentMultilineText(text: string, template: string, placeholder: string): string {
+  // Find the placeholder in the template to get its indentation
+  const lines = template.split('\n');
+  let indentSpaces = 0;
+
+  for (const line of lines) {
+    const placeholderIndex = line.indexOf(placeholder);
+    if (placeholderIndex !== -1) {
+      // Count leading spaces before the placeholder
+      const beforePlaceholder = line.substring(0, placeholderIndex);
+      const match = beforePlaceholder.match(/^(\s*)/);
+      if (match) {
+        indentSpaces = match[1].length;
+      }
+      break;
+    }
+  }
+
+  // Apply indentation to each line of the text (except the first line)
+  const textLines = text.split('\n');
+  if (textLines.length === 1) {
+    return text;
+  }
+
+  const indent = ' '.repeat(indentSpaces);
+  return textLines.map((line, index) => {
+    if (index === 0) {
+      return line;
+    }
+    return indent + line;
+  }).join('\n');
+}
+
+/**
  * Formats unified review results using a template
  */
 export function formatUnifiedReviewResults(results: ReviewResult[], template: string): string {
@@ -89,9 +125,15 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
         currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
         currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
         currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
-        currentIssueSection = currentIssueSection.replace(/{codeSnippet}/g, issue.codeSnippet);
+
+        // Apply indentation to multi-line code snippets
+        const indentedCodeSnippet = indentMultilineText(issue.codeSnippet, currentIssueSection, '{codeSnippet}');
+        const indentedFixedCode = indentMultilineText(issue.fixedCode || issue.codeSnippet, currentIssueSection, '{fixedCode}');
+
+        currentIssueSection = currentIssueSection.replace(/{codeSnippet}/g, indentedCodeSnippet);
         currentIssueSection = currentIssueSection.replace(/{reason}/g, issue.reason);
         currentIssueSection = currentIssueSection.replace(/{suggestion}/g, issue.suggestion);
+        currentIssueSection = currentIssueSection.replace(/{fixedCode}/g, indentedFixedCode);
 
         issueSections += currentIssueSection + '\n';
       }
