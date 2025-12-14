@@ -6,6 +6,12 @@ export interface Settings {
   systemPromptPath: string;
   summaryPromptPath: string;
   rulesets: Record<string, string[]>;
+  templatesPath: string;
+  fileOutput: {
+    enabled: boolean;
+    outputDir: string;
+    outputFileName: string;
+  };
 }
 
 /**
@@ -13,14 +19,8 @@ export interface Settings {
  */
 export interface RuleSettings {
   rulesPath: string;
-  templatesPath: string;
   reviewPromptPath?: string;
   falsePositivePromptPath?: string;
-  fileOutput: {
-    enabled: boolean;
-    outputDir: string;
-    outputFileName: string;
-  };
   reviewIterations: {
     default: number;
     chapter?: Record<string, number>;
@@ -28,6 +28,10 @@ export interface RuleSettings {
   falsePositiveCheckIterations: {
     default: number;
     chapter?: Record<string, number>;
+  };
+  chapterFilters?: {
+    default?: string[];
+    patterns?: Record<string, string[]>;
   };
 }
 
@@ -117,6 +121,7 @@ export interface FalsePositiveCheck {
 export interface ReviewResult {
   fileName: string;
   filePath: string;
+  rulesetName: string;
   diffDetails?: string;
   chapterResults: ChapterReviewResult[];
   totalIssues: number;

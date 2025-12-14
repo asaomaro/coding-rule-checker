@@ -30,30 +30,67 @@ export async function performReviewIteration(
     vscode.LanguageModelChatMessage.User(prompt)
   ];
 
-  if (progressCallback) {
-    progressCallback({
-      current: iterationNumber,
-      total: iterationNumber,
-      message: `Reviewing chapter ${chapter.id}: ${chapter.title} (iteration ${iterationNumber})`
-    });
+  // Progress is now handled at chapter level, not iteration level
+  console.log(`\n=== Sending review request for chapter ${chapter.id}: ${chapter.title} (iteration ${iterationNumber}) ===`);
+  console.log('Model info:', { family: model.family, name: model.name, vendor: model.vendor });
+  console.log('System prompt length:', systemPrompt.length);
+  console.log('Review prompt length:', prompt.length);
+  console.log('Messages count:', messages.length);
+  console.log('Code content length:', code.content.length);
+  console.log('Code file name:', code.fileName);
+
+  try {
+    console.log('Calling model.sendRequest...');
+    const startTime = Date.now();
+    const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+    const requestTime = Date.now() - startTime;
+    console.log(`Request returned after ${requestTime}ms`);
+
+    console.log('Streaming response text...');
+
+    // Parse response
+    let responseText = '';
+    let fragmentCount = 0;
+    for await (const fragment of response.text) {
+      fragmentCount++;
+      responseText += fragment;
+      if (fragmentCount <= 3) {
+        console.log(`Fragment ${fragmentCount}:`, fragment.substring(0, 100));
+      }
+    }
+
+    console.log(`Response received. Total fragments: ${fragmentCount}, Total length: ${responseText.length}`);
+    console.log('Response preview (first 500 chars):', responseText.substring(0, 500));
+    console.log('Response preview (last 200 chars):', responseText.substring(Math.max(0, responseText.length - 200)));
+
+    // Parse the response to extract issues
+    console.log('Parsing response for issues...');
+    const issues = parseReviewResponse(responseText, chapter.id);
+
+    console.log(`Parsed ${issues.length} issues`);
+    if (issues.length > 0) {
+      console.log('First issue:', JSON.stringify(issues[0], null, 2));
+      console.log(`All issues: ${JSON.stringify(issues.map(i => ({ line: i.lineNumber, rule: i.ruleId })))}`);
+    } else {
+      console.log('WARNING: No issues found in response!');
+      console.log('Full response for debugging:', responseText);
+    }
+    console.log('=== Review request complete ===\n');
+
+    return {
+      issues,
+      chapterId: chapter.id,
+      iterationNumber
+    };
+  } catch (error) {
+    console.error('ERROR during review request:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    return {
+      issues: [],
+      chapterId: chapter.id,
+      iterationNumber
+    };
   }
-
-  const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-  // Parse response
-  let responseText = '';
-  for await (const fragment of response.text) {
-    responseText += fragment;
-  }
-
-  // Parse the response to extract issues
-  const issues = parseReviewResponse(responseText, chapter.id);
-
-  return {
-    issues,
-    chapterId: chapter.id,
-    iterationNumber
-  };
 }
 
 /**
@@ -68,14 +105,14 @@ function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromp
     codeContent = diffInfo.additions.map(line => `${line.lineNumber}: ${line.content}`).join('\n');
   }
 
-  // Replace placeholders in template
+  // Replace placeholders in template (use replaceAll to replace all occurrences)
   let prompt = reviewPromptTemplate
-    .replace('{fileName}', code.fileName)
-    .replace('{filePath}', code.filePath)
-    .replace('{language}', code.language)
-    .replace('{code}', codeContent)
-    .replace('{chapterTitle}', chapter.title)
-    .replace('{chapterContent}', chapter.content);
+    .replaceAll('{fileName}', code.fileName)
+    .replaceAll('{filePath}', code.filePath)
+    .replaceAll('{language}', code.language)
+    .replaceAll('{code}', codeContent)
+    .replaceAll('{chapterTitle}', chapter.title)
+    .replaceAll('{chapterContent}', chapter.content);
 
   return prompt;
 }
@@ -87,11 +124,33 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
   const issues: ReviewIssue[] = [];
 
   try {
-    // Try to parse as JSON first
-    const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+    console.log('[parseReviewResponse] Attempting to parse response...');
+
+    // Try to parse as JSON with code block first
+    let jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+    let jsonText = null;
+
     if (jsonMatch) {
-      const json = JSON.parse(jsonMatch[1]);
-      if (Array.isArray(json.issues)) {
+      console.log('[parseReviewResponse] Found JSON code block, parsing...');
+      jsonText = jsonMatch[1];
+    } else {
+      console.log('[parseReviewResponse] No JSON code block found, trying raw JSON...');
+      // Try to parse the entire response as raw JSON
+      const trimmed = responseText.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        console.log('[parseReviewResponse] Response looks like raw JSON, attempting to parse...');
+        jsonText = trimmed;
+      }
+    }
+
+    if (jsonText) {
+      const json = JSON.parse(jsonText);
+      console.log('[parseReviewResponse] Parsed JSON:', JSON.stringify(json).substring(0, 200));
+      if (json.issues && Array.isArray(json.issues)) {
+        console.log(`[parseReviewResponse] Found ${json.issues.length} issues in JSON`);
+        if (json.issues.length === 0) {
+          console.log('[parseReviewResponse] WARNING: LLM returned empty issues array!');
+        }
         return json.issues.map((issue: any) => ({
           ruleId: issue.ruleId || chapterId,
           ruleTitle: issue.ruleTitle || '',
@@ -100,11 +159,17 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
           reason: issue.reason || '',
           suggestion: issue.suggestion || ''
         }));
+      } else {
+        console.log('[parseReviewResponse] JSON does not contain issues array');
       }
+    } else {
+      console.log('[parseReviewResponse] Response is not JSON, trying markdown format...');
     }
 
     // Fallback: Parse markdown format
     const issueBlocks = responseText.split(/(?=^- NG\d+)/m);
+    console.log(`[parseReviewResponse] Found ${issueBlocks.length} markdown blocks`);
+
     for (const block of issueBlocks) {
       const lineMatch = block.match(/行番号[：:]\s*(\d+)/);
       const snippetMatch = block.match(/```[\s\S]*?\n([\s\S]*?)\n```/);
@@ -122,10 +187,14 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
         });
       }
     }
+
+    console.log(`[parseReviewResponse] Extracted ${issues.length} issues from markdown format`);
   } catch (error) {
-    console.error('Failed to parse review response:', error);
+    console.error('[parseReviewResponse] Failed to parse review response:', error);
+    console.error('[parseReviewResponse] Error details:', error instanceof Error ? error.stack : String(error));
   }
 
+  console.log(`[parseReviewResponse] Returning ${issues.length} total issues`);
   return issues;
 }
 

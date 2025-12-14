@@ -164,16 +164,26 @@ export async function getGitHubFileContent(url: string): Promise<CodeToReview> {
   const [, owner, repo, branch, filePath] = match;
   const fileName = path.basename(filePath);
 
-  // Use gh CLI to get file content
-  const command = `gh api repos/${owner}/${repo}/contents/${filePath}?ref=${branch} --jq '.content' | base64 -d`;
+  // Use gh CLI to get file content (without using base64 command)
+  const command = `gh api repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
   const { stdout } = await execAsync(command);
+
+  // Parse JSON response and decode base64 content
+  const response = JSON.parse(stdout);
+  if (!response.content) {
+    throw new Error('File content not found in GitHub API response');
+  }
+
+  // Decode base64 content (replace newlines first as GitHub API includes them)
+  const base64Content = response.content.replace(/\n/g, '');
+  const content = Buffer.from(base64Content, 'base64').toString('utf-8');
 
   const extension = path.extname(filePath);
 
   return {
     fileName,
     filePath: url,
-    content: stdout,
+    content,
     language: getLanguageFromExtension(extension),
     isDiff: false
   };
@@ -192,18 +202,171 @@ export async function getGitHubDiff(url: string, diffRange: string): Promise<Cod
 
   const [, owner, repo] = match;
 
+  // GitHub API requires 'heads/' prefix for branch names containing slashes
+  // Tags without slashes (v1.0.0, v2.1.3) work as-is
+  // Tags with slashes (release/v1.0.0) would need 'tags/' prefix, but this is rare
+  // Commit hashes work as-is regardless of format
+  const processedDiffRange = diffRange
+    .split('..')
+    .map(ref => {
+      // Add 'heads/' prefix if ref contains a slash (assumes it's a branch)
+      // For tag support: if tags contain slashes, they would need 'tags/' prefix
+      return ref.includes('/') ? `heads/${ref}` : ref;
+    })
+    .join('...');
+
   // Use gh CLI to get diff
-  const command = `gh api repos/${owner}/${repo}/compare/${diffRange} --jq '.files[] | .patch'`;
+  const command = `gh api repos/${owner}/${repo}/compare/${processedDiffRange}`;
+  console.log('[getGitHubDiff] Executing command:', command);
+  console.log('[getGitHubDiff] Original diff range:', diffRange);
+  console.log('[getGitHubDiff] Processed diff range:', processedDiffRange);
+
   const { stdout } = await execAsync(command);
+
+  const response = JSON.parse(stdout);
+  const patches = response.files?.map((file: any) => file.patch).filter(Boolean).join('\n') || '';
 
   return {
     fileName: `${owner}/${repo}`,
     filePath: url,
-    content: stdout,
+    content: patches,
     language: 'diff',
     diffRange,
     isDiff: true
   };
+}
+
+/**
+ * Retrieves compare diff from GitHub using gh CLI with optional file filtering
+ */
+export async function getGitHubCompareDiff(url: string, compareRange: string, targetFilePath?: string): Promise<CodeToReview[]> {
+  // Parse GitHub URL to extract owner and repo
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) {
+    throw new Error('Invalid GitHub URL format');
+  }
+
+  const [, owner, repo] = match;
+
+  // GitHub API requires 'heads/' prefix for branch names containing slashes
+  // For example: "main..develop/feature" becomes "main...heads/develop/feature"
+  // Tags without slashes (v1.0.0, v2.1.3) work as-is
+  // Tags with slashes (release/v1.0.0) would need 'tags/' prefix, but this is rare
+  // Commit hashes work as-is regardless of format
+  const processedCompareRange = compareRange
+    .split('..')
+    .map(ref => {
+      // Add 'heads/' prefix if ref contains a slash (assumes it's a branch)
+      // For tag support: if tags contain slashes, they would need 'tags/' prefix
+      return ref.includes('/') ? `heads/${ref}` : ref;
+    })
+    .join('...');
+
+  // Use gh CLI to get compare diff
+  const command = `gh api repos/${owner}/${repo}/compare/${processedCompareRange}`;
+  console.log('[getGitHubCompareDiff] Executing command:', command);
+  console.log('[getGitHubCompareDiff] Original compare range:', compareRange);
+  console.log('[getGitHubCompareDiff] Processed compare range:', processedCompareRange);
+
+  const { stdout } = await execAsync(command);
+
+  const response = JSON.parse(stdout);
+
+  if (!response.files || response.files.length === 0) {
+    throw new Error('No files found in comparison');
+  }
+
+  const results: CodeToReview[] = [];
+
+  // Filter files if targetFilePath is specified
+  let filesToProcess = response.files;
+  if (targetFilePath) {
+    filesToProcess = response.files.filter((file: any) =>
+      file.filename === targetFilePath || file.filename.endsWith(targetFilePath)
+    );
+
+    if (filesToProcess.length === 0) {
+      throw new Error(`File "${targetFilePath}" not found in comparison`);
+    }
+  }
+
+  // Process each file
+  for (const file of filesToProcess) {
+    if (!file.patch) {
+      continue; // Skip files without diffs (e.g., binary files)
+    }
+
+    const extension = path.extname(file.filename);
+
+    results.push({
+      fileName: path.basename(file.filename),
+      filePath: `${url}/compare/${compareRange}#${file.filename}`,
+      content: file.patch,
+      language: getLanguageFromExtension(extension),
+      diffRange: compareRange,
+      isDiff: true
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Retrieves commit diff from GitHub using gh CLI
+ */
+export async function getGitHubCommitDiff(url: string, targetFileName?: string): Promise<CodeToReview[]> {
+  // Parse GitHub commit URL to extract owner, repo, and commit hash
+  // Format: https://github.com/owner/repo/commit/hash
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/commit\/([a-f0-9]+)/);
+  if (!match) {
+    throw new Error('Invalid GitHub commit URL format');
+  }
+
+  const [, owner, repo, commitHash] = match;
+
+  // Use gh CLI to get commit details
+  const command = `gh api repos/${owner}/${repo}/commits/${commitHash}`;
+  const { stdout } = await execAsync(command);
+
+  const response = JSON.parse(stdout);
+
+  if (!response.files || response.files.length === 0) {
+    throw new Error('No files found in commit');
+  }
+
+  const results: CodeToReview[] = [];
+
+  // Filter files if targetFileName is specified
+  let filesToProcess = response.files;
+  if (targetFileName) {
+    filesToProcess = response.files.filter((file: any) =>
+      file.filename.endsWith(targetFileName) || file.filename === targetFileName
+    );
+
+    if (filesToProcess.length === 0) {
+      throw new Error(`File "${targetFileName}" not found in commit`);
+    }
+  }
+
+  // Process each file
+  for (const file of filesToProcess) {
+    if (!file.patch) {
+      continue; // Skip files without diffs (e.g., binary files, deleted files without content)
+    }
+
+    const extension = path.extname(file.filename);
+
+    results.push({
+      fileName: path.basename(file.filename),
+      filePath: `${url}#${file.filename}`,
+      content: file.patch,
+      language: getLanguageFromExtension(extension),
+      diffRange: commitHash,
+      isDiff: true
+    });
+  }
+
+  return results;
 }
 
 /**

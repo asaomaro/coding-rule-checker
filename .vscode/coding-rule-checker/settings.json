@@ -1,12 +1,19 @@
 {
-  "model": "copilot-gpt-4",
+  "model": "gpt-5-mini",
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
+  },
   "rulesets": {
     ".js": ["sample-rule"],
     ".ts": ["sample-rule"],
     ".jsx": ["sample-rule"],
     ".tsx": ["sample-rule"],
-    ".py": ["sample-rule"]
+    ".py": ["sample-rule"],
+    ".java": ["java-rule"]
   }
 }

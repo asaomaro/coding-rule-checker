@@ -28,6 +28,7 @@ export async function reviewCodeParallel(
   code: CodeToReview,
   chapters: RuleChapter[],
   ruleSettings: RuleSettings,
+  rulesetName: string,
   systemPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
@@ -35,10 +36,21 @@ export async function reviewCodeParallel(
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult> {
   const chapterResults: ChapterReviewResult[] = [];
+  const totalChapters = chapters.length;
+  let completedChapters = 0;
 
-  // Process all chapters in parallel
-  const chapterPromises = chapters.map(async (chapter) => {
-    return await reviewChapter(
+  // Show initial progress
+  if (progressCallback) {
+    progressCallback({
+      current: 0,
+      total: totalChapters,
+      message: `Processing ${totalChapters} chapters in parallel...`
+    });
+  }
+
+  // Process all chapters in parallel with progress tracking
+  const chapterPromises = chapters.map(async (chapter, index) => {
+    const result = await reviewChapter(
       code,
       chapter,
       ruleSettings,
@@ -46,8 +58,20 @@ export async function reviewCodeParallel(
       reviewPromptTemplate,
       falsePositivePromptTemplate,
       model,
-      progressCallback
+      undefined  // Don't pass progressCallback to individual iterations
     );
+
+    // Update progress when each chapter completes
+    completedChapters++;
+    if (progressCallback) {
+      progressCallback({
+        current: completedChapters,
+        total: totalChapters,
+        message: `Completed ${completedChapters}/${totalChapters} chapters (Chapter ${chapter.id}: ${chapter.title})`
+      });
+    }
+
+    return result;
   });
 
   const results = await Promise.all(chapterPromises);
@@ -60,6 +84,7 @@ export async function reviewCodeParallel(
   return {
     fileName: code.fileName,
     filePath: code.filePath,
+    rulesetName,
     diffDetails: code.diffRange,
     chapterResults,
     totalIssues,
@@ -147,6 +172,7 @@ export async function reviewMultipleFiles(
   files: CodeToReview[],
   chapters: RuleChapter[],
   ruleSettings: RuleSettings,
+  rulesetName: string,
   systemPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
@@ -164,6 +190,7 @@ export async function reviewMultipleFiles(
         file,
         chapters,
         ruleSettings,
+        rulesetName,
         systemPrompt,
         reviewPromptTemplate,
         falsePositivePromptTemplate,

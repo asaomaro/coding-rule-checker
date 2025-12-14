@@ -1,5 +1,5 @@
 {
-  "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
+  "rulesPath": ".vscode/coding-rule-checker/java-rule/rules",
   "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
   "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
   "reviewIterations": {

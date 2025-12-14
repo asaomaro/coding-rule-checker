@@ -1,90 +1,152 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ReviewResult, RuleSettings } from './types';
+import { ReviewResult, Settings } from './types';
 
 /**
- * Formats review result as markdown
+ * Extracts a template section from the template content
  */
-export function formatReviewResult(result: ReviewResult, template?: string): string {
-  if (template) {
-    return formatWithTemplate(result, template);
+function extractTemplateSection(template: string, startMarker: string, endMarker: string): string {
+  const startIndex = template.indexOf(startMarker);
+  const endIndex = template.indexOf(endMarker);
+
+  if (startIndex === -1 || endIndex === -1) {
+    return '';
   }
 
-  // Default format
-  let output = '# Review Sheet\n\n';
-  output += `## Review File\n[${result.fileName}](${result.filePath})\n\n`;
-
-  if (result.diffDetails) {
-    output += `## Diff Details\n${result.diffDetails}\n\n`;
-  }
-
-  output += '## Review Results\n\n';
-
-  for (const chapter of result.chapterResults) {
-    if (chapter.issues.length === 0) {
-      continue;
-    }
-
-    output += `### ${chapter.chapterId}. ${chapter.chapterTitle}\n`;
-
-    for (let i = 0; i < chapter.issues.length; i++) {
-      const issue = chapter.issues[i];
-      output += `- NG${i + 1} : ${issue.lineNumber}\n`;
-      output += `    - NGコードスニペット:\n`;
-      output += `        \`\`\`\n`;
-      output += `        ${issue.codeSnippet}\n`;
-      output += `        \`\`\`\n`;
-      output += `    - NG理由:\n`;
-      output += `        ${issue.reason}\n`;
-      output += `    - 修正案:\n`;
-      output += `        ${issue.suggestion}\n`;
-    }
-
-    output += '\n';
-  }
-
-  output += '## Review Summary\n';
-  output += `- NG数: ${result.totalIssues}\n`;
-  output += `- 主な指摘: ${result.reviewedChapters.join(', ')}\n`;
-
-  return output;
+  return template.substring(startIndex + startMarker.length, endIndex).trim();
 }
 
 /**
- * Formats review result using a template
+ * Formats unified review results using a template
  */
-function formatWithTemplate(result: ReviewResult, template: string): string {
+export function formatUnifiedReviewResults(results: ReviewResult[], template: string): string {
+  if (results.length === 0) {
+    return template;
+  }
+
+  const firstResult = results[0];
   let output = template;
 
-  // Replace basic placeholders
-  output = output.replace('{fileName}', result.fileName);
-  output = output.replace('{filePath}', result.filePath);
-  output = output.replace('{diffDetails}', result.diffDetails || '');
-  output = output.replace('{totalIssues}', result.totalIssues.toString());
-  output = output.replace('{reviewedChapters}', result.reviewedChapters.join(', '));
+  // Replace file-level placeholders
+  output = output.replace(/{fileName}/g, firstResult.fileName);
+  output = output.replace(/{filePath}/g, firstResult.filePath);
+  output = output.replace(/{diffDetails}/g, firstResult.diffDetails || '');
+
+  // Calculate total issues
+  const totalIssuesAll = results.reduce((sum, r) => sum + r.totalIssues, 0);
+  output = output.replace(/{totalIssues}/g, totalIssuesAll.toString());
+
+  // Extract templates
+  const rulesetTemplate = extractTemplateSection(
+    template,
+    '<!-- RULESET_SECTION_START -->',
+    '<!-- RULESET_SECTION_END -->'
+  );
+
+  const chapterTemplate = extractTemplateSection(
+    rulesetTemplate,
+    '<!-- CHAPTER_SECTION_START -->',
+    '<!-- CHAPTER_SECTION_END -->'
+  );
+
+  const issueTemplate = extractTemplateSection(
+    chapterTemplate,
+    '<!-- ISSUE_START -->',
+    '<!-- ISSUE_END -->'
+  );
+
+  // Build ruleset sections
+  let rulesetSections = '';
+
+  for (const result of results) {
+    let currentRulesetSection = rulesetTemplate;
+
+    // Replace ruleset-level placeholders
+    currentRulesetSection = currentRulesetSection.replace(/{rulesetName}/g, result.rulesetName);
+    currentRulesetSection = currentRulesetSection.replace(/{issueCount}/g, result.totalIssues.toString());
+    currentRulesetSection = currentRulesetSection.replace(/{reviewedChapters}/g, result.reviewedChapters.join(', '));
+
+    // Build chapter sections
+    let chapterSections = '';
+
+    for (const chapter of result.chapterResults) {
+      if (chapter.issues.length === 0) continue;
+
+      let currentChapterSection = chapterTemplate;
+
+      // Replace chapter-level placeholders
+      currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
+      currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+
+      // Build issue sections
+      let issueSections = '';
+
+      for (let i = 0; i < chapter.issues.length; i++) {
+        const issue = chapter.issues[i];
+        let currentIssueSection = issueTemplate;
+
+        // Replace issue-level placeholders
+        currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
+        currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
+        currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
+        currentIssueSection = currentIssueSection.replace(/{codeSnippet}/g, issue.codeSnippet);
+        currentIssueSection = currentIssueSection.replace(/{reason}/g, issue.reason);
+        currentIssueSection = currentIssueSection.replace(/{suggestion}/g, issue.suggestion);
+
+        issueSections += currentIssueSection + '\n';
+      }
+
+      // Replace issue sections in chapter template
+      currentChapterSection = currentChapterSection.replace(
+        /<!-- ISSUE_START -->[\s\S]*?<!-- ISSUE_END -->/,
+        issueSections.trim()
+      );
+
+      chapterSections += currentChapterSection + '\n';
+    }
+
+    // Replace chapter sections in ruleset template
+    currentRulesetSection = currentRulesetSection.replace(
+      /<!-- CHAPTER_SECTION_START -->[\s\S]*?<!-- CHAPTER_SECTION_END -->/,
+      chapterSections.trim()
+    );
+
+    rulesetSections += currentRulesetSection + '\n';
+  }
+
+  // Replace {rulesetResults} in main template
+  output = output.replace(/{rulesetResults}/g, rulesetSections.trim());
+
+  // Remove template sections (these are only for defining the format)
+  output = output.replace(/<!-- RULESET_SECTION_START -->[\s\S]*<!-- RULESET_SECTION_END -->/g, '');
 
   return output;
 }
 
 /**
- * Saves review result to a file
+ * Saves unified review results to a file
  */
-export async function saveReviewResult(
-  result: ReviewResult,
-  ruleSettings: RuleSettings,
+export async function saveUnifiedReviewResults(
+  results: ReviewResult[],
+  settings: Settings,
   workspaceRoot: string,
-  template?: string
+  template: string
 ): Promise<string> {
-  if (!ruleSettings.fileOutput.enabled) {
+  if (results.length === 0) {
+    throw new Error('No review results to save');
+  }
+
+  if (!settings.fileOutput.enabled) {
     throw new Error('File output is not enabled');
   }
 
-  const outputDir = path.join(workspaceRoot, ruleSettings.fileOutput.outputDir);
+  const outputDir = path.join(workspaceRoot, settings.fileOutput.outputDir);
   await fs.mkdir(outputDir, { recursive: true });
 
   // Generate output file name
-  const originalFileName = path.basename(result.fileName, path.extname(result.fileName));
-  const outputFileName = ruleSettings.fileOutput.outputFileName.replace(
+  const firstResult = results[0];
+  const originalFileName = path.basename(firstResult.fileName, path.extname(firstResult.fileName));
+  const outputFileName = settings.fileOutput.outputFileName.replace(
     '{originalFileName}',
     originalFileName
   );
@@ -92,47 +154,10 @@ export async function saveReviewResult(
   const outputPath = path.join(outputDir, outputFileName);
 
   // Format and save
-  const content = formatReviewResult(result, template);
+  const content = formatUnifiedReviewResults(results, template);
   await fs.writeFile(outputPath, content, 'utf-8');
 
   return outputPath;
-}
-
-/**
- * Formats multiple review results
- */
-export function formatMultipleReviewResults(results: ReviewResult[], template?: string): string {
-  let output = '# Code Review Report\n\n';
-  output += `## Summary\n`;
-  output += `- Total files reviewed: ${results.length}\n`;
-  output += `- Total issues found: ${results.reduce((sum, r) => sum + r.totalIssues, 0)}\n\n`;
-  output += '---\n\n';
-
-  for (const result of results) {
-    output += formatReviewResult(result, template);
-    output += '\n---\n\n';
-  }
-
-  return output;
-}
-
-/**
- * Saves multiple review results to separate files
- */
-export async function saveMultipleReviewResults(
-  results: ReviewResult[],
-  ruleSettings: RuleSettings,
-  workspaceRoot: string,
-  template?: string
-): Promise<string[]> {
-  const outputPaths: string[] = [];
-
-  for (const result of results) {
-    const outputPath = await saveReviewResult(result, ruleSettings, workspaceRoot, template);
-    outputPaths.push(outputPath);
-  }
-
-  return outputPaths;
 }
 
 /**

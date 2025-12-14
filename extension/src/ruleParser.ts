@@ -6,18 +6,41 @@ import { RuleChapter, Rule } from './types';
  * Loads all rule files from a directory and parses them into chapters
  */
 export async function loadRules(rulesPath: string): Promise<RuleChapter[]> {
+  console.log('loadRules: rulesPath =', rulesPath);
+
   const files = await fs.readdir(rulesPath);
+  console.log('loadRules: found files =', files);
+
   const markdownFiles = files.filter(file => file.endsWith('.md')).sort();
+  console.log('loadRules: markdown files =', markdownFiles);
 
   const allChapters: RuleChapter[] = [];
 
   for (const file of markdownFiles) {
-    const filePath = path.join(rulesPath, file);
+    const backslash = String.fromCharCode(92);
+    const filePath = rulesPath + backslash + file;
+    console.log('loadRules: reading file =', filePath);
+
     const content = await fs.readFile(filePath, 'utf-8');
+    console.log('loadRules: file content length =', content.length);
+
+    // Debug: show first 200 chars
+    console.log('loadRules: first 200 chars:', content.substring(0, 200));
+
     const chapters = parseRuleMarkdown(content);
+    console.log('loadRules: parsed chapters from', file, '=', chapters.length);
+
+    if (chapters.length === 0) {
+      // Debug parsing
+      const lines = content.split('\n');
+      console.log('loadRules: total lines =', lines.length);
+      console.log('loadRules: first 3 lines:', lines.slice(0, 3));
+    }
+
     allChapters.push(...chapters);
   }
 
+  console.log('loadRules: total chapters =', allChapters.length);
   return allChapters;
 }
 
@@ -30,7 +53,10 @@ export function parseRuleMarkdown(markdown: string): RuleChapter[] {
   let currentChapter: RuleChapter | null = null;
   let currentChapterContent: string[] = [];
 
-  for (const line of lines) {
+  for (let line of lines) {
+    // Trim whitespace including \r\n
+    line = line.trim();
+
     // Check for H2 headers (## 1. Chapter Title)
     const h2Match = line.match(/^##\s+(\d+)\.\s+(.+)$/);
     if (h2Match) {
