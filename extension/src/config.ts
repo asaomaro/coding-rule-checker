@@ -14,8 +14,8 @@ export async function loadSettings(workspaceRoot: string): Promise<Settings> {
     const content = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(content) as Settings;
 
-    // Validate required fields
-    if (!settings.model || !settings.systemPromptPath || !settings.summaryPromptPath || !settings.rulesets) {
+    // Validate required fields (model is optional)
+    if (!settings.systemPromptPath || !settings.summaryPromptPath || !settings.rulesets) {
       throw new Error('Missing required fields in settings.json');
     }
 

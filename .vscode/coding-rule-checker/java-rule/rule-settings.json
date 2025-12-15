@@ -2,6 +2,8 @@
   "rulesPath": ".vscode/coding-rule-checker/java-rule/rules",
   "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
   "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
+  "commonInstructionsPath": ".vscode/coding-rule-checker/java-rule/rules/01_総則・適用範囲.md",
+  "aggregationThreshold": 1,
   "reviewIterations": {
     "default": 2,
     "chapter": {

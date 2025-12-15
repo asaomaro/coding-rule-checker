@@ -14,6 +14,8 @@ import {
   getLocalFileContent,
   getLocalFileDiff,
   getAllFilesDiff,
+  getLocalFolderFiles,
+  isDirectory,
   getGitHubFileContent,
   getGitHubDiff,
   getGitHubCompareDiff,
@@ -59,8 +61,9 @@ async function handleChatRequest(
 
   if (!command) {
     stream.markdown('Please use one of the following commands:\n');
-    stream.markdown('- `/reviewAll #file` - Review all code in the specified file\n');
-    stream.markdown('- `/reviewDiff [range] #file` - Review diff code (optionally specify diff range)\n');
+    stream.markdown('- `/review #file` - Review all code in the specified file\n');
+    stream.markdown('- `/review #folder` - Review all code files in the specified folder\n');
+    stream.markdown('- `/diff [range] #file` - Review diff code (optionally specify diff range)\n');
     return;
   }
 
@@ -83,16 +86,30 @@ async function handleChatRequest(
   const settings = await loadSettings(workspaceRoot);
 
   // Get language model
-  const models = await vscode.lm.selectChatModels({ family: settings.model });
-  if (models.length === 0) {
-    // List all available models for debugging
-    const allModels = await vscode.lm.selectChatModels();
-    const availableModels = allModels.map(m => `${m.family} (${m.name})`).join(', ');
-    throw new Error(
-      `No language model found for: ${settings.model}\n\n` +
-      `Available models: ${availableModels || 'None'}\n\n` +
-      `Please update the "model" field in .vscode/coding-rule-checker/settings.json to use one of the available model families.`
-    );
+  let models: vscode.LanguageModelChat[];
+  if (settings.model) {
+    // Use the specified model from settings
+    models = await vscode.lm.selectChatModels({ family: settings.model });
+    if (models.length === 0) {
+      // List all available models for debugging
+      const allModels = await vscode.lm.selectChatModels();
+      const availableModels = allModels.map(m => `${m.family} (${m.name})`).join(', ');
+      throw new Error(
+        `No language model found for: ${settings.model}\n\n` +
+        `Available models: ${availableModels || 'None'}\n\n` +
+        `Please update the "model" field in .vscode/coding-rule-checker/settings.json to use one of the available model families.`
+      );
+    }
+  } else {
+    // No model specified in settings - use the currently selected model in Copilot Chat
+    models = await vscode.lm.selectChatModels();
+    if (models.length === 0) {
+      throw new Error(
+        `No language model available.\n\n` +
+        `Please ensure GitHub Copilot is properly configured.`
+      );
+    }
+    stream.markdown(`ℹ️ No model specified in settings - using currently selected Copilot model\n`);
   }
   const model = models[0];
   stream.markdown(`🤖 Using model: ${model.name} (${model.family})\n`);
@@ -143,7 +160,14 @@ async function handleChatRequest(
       // Load rules
       const rulesPath = resolveWorkspacePath(workspaceRoot, ruleSettings.rulesPath);
 
-      const allChapters = await loadRules(rulesPath);
+      // Determine the exclude file name if commonInstructionsPath is specified
+      let excludeFileName: string | undefined;
+      if (ruleSettings.commonInstructionsPath) {
+        const commonInstructionsFullPath = resolveWorkspacePath(workspaceRoot, ruleSettings.commonInstructionsPath);
+        excludeFileName = path.basename(commonInstructionsFullPath);
+      }
+
+      const allChapters = await loadRules(rulesPath, excludeFileName);
 
       stream.markdown(`📚 Loaded ${allChapters.length} chapters from: ${rulesPath}\n`);
 
@@ -179,6 +203,17 @@ async function handleChatRequest(
       const reviewPrompt = await loadPromptTemplate(workspaceRoot, reviewPromptPath);
       const falsePositivePrompt = await loadPromptTemplate(workspaceRoot, falsePositivePromptPath);
 
+      // Load common instructions if specified
+      let commonInstructions = '';
+      if (ruleSettings.commonInstructionsPath) {
+        try {
+          commonInstructions = await loadPromptTemplate(workspaceRoot, ruleSettings.commonInstructionsPath);
+          stream.markdown(`📖 Loaded common instructions from: ${ruleSettings.commonInstructionsPath}\n`);
+        } catch (error) {
+          stream.markdown(`⚠️ Failed to load common instructions: ${error instanceof Error ? error.message : String(error)}\n`);
+        }
+      }
+
       // Perform review
       const result = await reviewCodeParallel(
         code,
@@ -188,6 +223,7 @@ async function handleChatRequest(
         systemPrompt,
         reviewPrompt,
         falsePositivePrompt,
+        commonInstructions,
         model,
         (progress) => {
           stream.progress(progress.message);
@@ -330,7 +366,7 @@ function parseReviewRequest(request: vscode.ChatRequest, command: string): Revie
   }
 
   // Parse diff range if present (only if not already set by URL parsing)
-  if (command === 'reviewDiff' && !diffRange) {
+  if (command === 'diff' && !diffRange) {
     // Look for patterns like "main..feature", tags "v1.0.0..v2.0.0", relative refs "HEAD^..main", etc.
     // Supports: branches, tags, commit hashes, relative refs (HEAD^, HEAD~3, @~2, HEAD@{yesterday})
     const rangeMatch = text.match(/([\w.\/~^@{}\-]+\.\.+[\w.\/~^@{}\-]+)/);
@@ -341,7 +377,7 @@ function parseReviewRequest(request: vscode.ChatRequest, command: string): Revie
   }
 
   const sourceType = determineSourceType(fileOrUrl);
-  const reviewType = command === 'reviewAll' ? 'all' : 'diff';
+  const reviewType = command === 'review' ? 'all' : 'diff';
 
   return {
     sourceType,
@@ -410,17 +446,30 @@ async function getCodeToReview(request: ReviewRequest, workspaceRoot: string): P
       }
     }
   } else {
-    // Local file
-    console.log('[getCodeToReview] Processing local file...');
+    // Local file or folder
+    console.log('[getCodeToReview] Processing local file/folder...');
     if (request.reviewType === 'all') {
       console.log('[getCodeToReview] Review type: all');
       if (request.fileOrUrl) {
-        console.log('[getCodeToReview] Loading file content:', request.fileOrUrl);
-        const code = await getLocalFileContent(request.fileOrUrl);
-        codes.push(code);
-        console.log('[getCodeToReview] File loaded successfully');
+        // Check if it's a directory or file
+        const isDir = await isDirectory(request.fileOrUrl);
+
+        if (isDir) {
+          console.log('[getCodeToReview] Loading folder contents:', request.fileOrUrl);
+
+          // Get all supported extensions from settings
+          // We'll pass undefined for now and filter later based on rulesets
+          const folderCodes = await getLocalFolderFiles(request.fileOrUrl);
+          codes.push(...folderCodes);
+          console.log('[getCodeToReview] Loaded', folderCodes.length, 'files from folder');
+        } else {
+          console.log('[getCodeToReview] Loading file content:', request.fileOrUrl);
+          const code = await getLocalFileContent(request.fileOrUrl);
+          codes.push(code);
+          console.log('[getCodeToReview] File loaded successfully');
+        }
       } else {
-        console.log('[getCodeToReview] ERROR: No file specified for reviewAll');
+        console.log('[getCodeToReview] ERROR: No file/folder specified for reviewAll');
       }
     } else {
       console.log('[getCodeToReview] Review type: diff');

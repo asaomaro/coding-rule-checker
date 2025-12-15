@@ -34,11 +34,11 @@
         "isSticky": true,
         "commands": [
           {
-            "name": "reviewAll",
-            "description": "Review all code in the specified file"
+            "name": "review",
+            "description": "Review all code in the specified file or folder"
           },
           {
-            "name": "reviewDiff",
+            "name": "diff",
             "description": "Review only the diff code"
           }
         ]

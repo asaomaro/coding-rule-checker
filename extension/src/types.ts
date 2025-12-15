@@ -2,7 +2,7 @@
  * Main settings configuration
  */
 export interface Settings {
-  model: string;
+  model?: string;
   systemPromptPath: string;
   summaryPromptPath: string;
   rulesets: Record<string, string[]>;
@@ -21,6 +21,7 @@ export interface RuleSettings {
   rulesPath: string;
   reviewPromptPath?: string;
   falsePositivePromptPath?: string;
+  commonInstructionsPath?: string;
   reviewIterations: {
     default: number;
     chapter?: Record<string, number>;
@@ -29,6 +30,7 @@ export interface RuleSettings {
     default: number;
     chapter?: Record<string, number>;
   };
+  aggregationThreshold?: number;
   chapterFilters?: {
     default?: string[];
     patterns?: Record<string, string[]>;
@@ -96,6 +98,8 @@ export interface ReviewIssue {
   reason: string;
   suggestion: string;
   fixedCode?: string;
+  detectionCount?: number;
+  totalIterations?: number;
 }
 
 /**

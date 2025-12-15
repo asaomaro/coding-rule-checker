@@ -17,12 +17,13 @@ export async function performReviewIteration(
   chapter: RuleChapter,
   systemPrompt: string,
   reviewPrompt: string,
+  commonInstructions: string,
   iterationNumber: number,
   model: vscode.LanguageModelChat,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewIteration> {
   // Build the review prompt
-  const prompt = buildReviewPrompt(code, chapter, reviewPrompt);
+  const prompt = buildReviewPrompt(code, chapter, reviewPrompt, commonInstructions);
 
   // Send to language model
   const messages = [
@@ -96,7 +97,12 @@ export async function performReviewIteration(
 /**
  * Builds the review prompt with code and rules
  */
-function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromptTemplate: string): string {
+function buildReviewPrompt(
+  code: CodeToReview,
+  chapter: RuleChapter,
+  reviewPromptTemplate: string,
+  commonInstructions: string
+): string {
   let codeContent = code.content;
 
   // If it's a diff, extract only added lines
@@ -112,7 +118,8 @@ function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromp
     .replaceAll('{language}', code.language)
     .replaceAll('{code}', codeContent)
     .replaceAll('{chapterTitle}', chapter.title)
-    .replaceAll('{chapterContent}', chapter.content);
+    .replaceAll('{chapterContent}', chapter.content)
+    .replaceAll('{commonInstructions}', commonInstructions);
 
   return prompt;
 }
@@ -260,9 +267,15 @@ function buildFalsePositivePrompt(
 
 /**
  * Aggregates multiple review iterations
+ * @param iterations - Array of review iterations
+ * @param thresholdRatio - Threshold ratio (0.0-1.0). 0.0 = all iterations must detect, 1.0 = any iteration detects. Default: 0.5
  */
-export function aggregateReviewIterations(iterations: ReviewIteration[]): ReviewIssue[] {
+export function aggregateReviewIterations(
+  iterations: ReviewIteration[],
+  thresholdRatio: number = 0.5
+): ReviewIssue[] {
   const issueMap = new Map<string, ReviewIssue & { count: number }>();
+  const totalIterations = iterations.length;
 
   for (const iteration of iterations) {
     for (const issue of iteration.issues) {
@@ -277,14 +290,24 @@ export function aggregateReviewIterations(iterations: ReviewIteration[]): Review
     }
   }
 
-  // Filter issues that appeared in majority of iterations
-  const threshold = Math.ceil(iterations.length / 2);
+  // Calculate threshold based on ratio
+  // thresholdRatio 1.0 = 1 detection is enough (count >= 1)
+  // thresholdRatio 0.5 = majority (count >= ceil(total / 2))
+  // thresholdRatio 0.0 = all iterations must detect (count >= total)
+  const minDetections = thresholdRatio === 1.0
+    ? 1
+    : Math.ceil(totalIterations * (1 - thresholdRatio));
+
   const aggregatedIssues: ReviewIssue[] = [];
 
   for (const [, issue] of issueMap) {
-    if (issue.count >= threshold) {
+    if (issue.count >= minDetections) {
       const { count, ...issueWithoutCount } = issue;
-      aggregatedIssues.push(issueWithoutCount);
+      aggregatedIssues.push({
+        ...issueWithoutCount,
+        detectionCount: count,
+        totalIterations: totalIterations
+      });
     }
   }
 

@@ -47,14 +47,14 @@ run-lint.bat
 ### Testing the Extension
 1. Open project in VSCode
 2. Press `F5` to launch Extension Development Host
-3. In the new window, use: `@coding-rule-checker /reviewAll #file`
+3. In the new window, use: `@coding-rule-checker /review #file`
 
 ## Architecture
 
 ### Core Flow
 1. **Chat Participant** (`extension.ts`) - Entry point that handles Copilot Chat commands
 2. **Config Manager** (`config.ts`) - Loads settings, rule configurations, and prompt templates
-3. **Code Retriever** (`codeRetriever.ts`) - Fetches code from local files, git diffs, or GitHub (via `gh` CLI)
+3. **Code Retriever** (`codeRetriever.ts`) - Fetches code from local files, folders, git diffs, or GitHub (via `gh` CLI)
 4. **Rule Parser** (`ruleParser.ts`) - Parses Markdown rule files into structured chapters
 5. **Parallel Reviewer** (`parallelReviewer.ts`) - Orchestrates parallel review execution
 6. **Review Engine** (`reviewEngine.ts`) - Executes reviews using Copilot Language Model
@@ -93,8 +93,12 @@ run-lint.bat
 ### Review Request Types
 
 **Commands:**
-- `/reviewAll #file` - Review entire file content
-- `/reviewDiff [range] #file` - Review only git diff
+- `/review #file` - Review entire file content
+- `/review #folder` - Review all code files in folder (recursively)
+  - Automatically excludes common build/dependency folders (node_modules, .git, dist, etc.)
+  - Files are filtered based on configured rulesets
+  - Multiple files are processed in parallel for efficiency
+- `/diff [range] #file` - Review only git diff
   - Range examples: `main..feature`, `abc123..def456`
   - Without file: reviews all changed files in workspace
   - Without range: reviews uncommitted changes
@@ -151,7 +155,7 @@ More specific guidance.
 ### Global Settings (`.vscode/coding-rule-checker/settings.json`)
 ```json
 {
-  "model": "copilot-gpt-4",
+  "model": "copilot-gpt-4",  // Optional: If omitted, uses currently selected Copilot model
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "rulesets": {
@@ -161,11 +165,14 @@ More specific guidance.
 }
 ```
 
+**Note:** The `model` field is optional. If not specified, the extension will use the currently selected model in Copilot Chat.
+
 ### Ruleset Settings (`.vscode/coding-rule-checker/[ruleset]/rule-settings.json`)
 ```json
 {
   "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
   "templatesPath": ".vscode/coding-rule-checker/sample-rule/review-results-templates.md",
+  "commonInstructionsPath": ".vscode/coding-rule-checker/sample-rule/rules/00_common.md",  // Optional
   "fileOutput": {
     "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
@@ -185,6 +192,20 @@ More specific guidance.
   }
 }
 ```
+
+**Common Instructions:**
+- `commonInstructionsPath` (optional): Path to a markdown file containing common instructions to be included in all reviews
+- This file is inserted via `{commonInstructions}` placeholder in review-prompt.md
+- If the file is in the rules folder, it will be automatically excluded from chapter reviews
+- Useful for ruleset-wide guidelines that apply to all chapters
+
+**Aggregation Threshold:**
+- `aggregationThreshold` (optional, default: 0.5): Threshold ratio for aggregating multiple review iterations (0.00-1.00)
+  - `1.0` = Accept if detected in any single iteration (most lenient)
+  - `0.5` = Accept if detected in majority of iterations (default)
+  - `0.0` = Accept only if detected in all iterations (most strict)
+  - Example: With 3 iterations and threshold 0.5, an issue must be detected at least 2 times to be included
+- Each issue in the output includes detection count: "NG指摘回数 : X / Y" where X is detection count and Y is total iterations
 
 ## Important Implementation Details
 

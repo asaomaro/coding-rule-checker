@@ -4,14 +4,24 @@ import { RuleChapter, Rule } from './types';
 
 /**
  * Loads all rule files from a directory and parses them into chapters
+ * @param rulesPath - Path to the rules directory
+ * @param excludeFile - Optional filename to exclude (e.g., for common instructions file)
  */
-export async function loadRules(rulesPath: string): Promise<RuleChapter[]> {
+export async function loadRules(rulesPath: string, excludeFile?: string): Promise<RuleChapter[]> {
   console.log('loadRules: rulesPath =', rulesPath);
+  console.log('loadRules: excludeFile =', excludeFile);
 
   const files = await fs.readdir(rulesPath);
   console.log('loadRules: found files =', files);
 
-  const markdownFiles = files.filter(file => file.endsWith('.md')).sort();
+  let markdownFiles = files.filter(file => file.endsWith('.md')).sort();
+
+  // Exclude the common instructions file if specified
+  if (excludeFile) {
+    markdownFiles = markdownFiles.filter(file => file !== excludeFile);
+    console.log('loadRules: excluded file =', excludeFile);
+  }
+
   console.log('loadRules: markdown files =', markdownFiles);
 
   const allChapters: RuleChapter[] = [];

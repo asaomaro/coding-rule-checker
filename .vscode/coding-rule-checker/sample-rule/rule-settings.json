@@ -2,6 +2,7 @@
   "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
   "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
   "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
+  "aggregationThreshold": 0.5,
   "reviewIterations": {
     "default": 2,
     "chapter": {

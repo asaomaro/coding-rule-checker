@@ -1,5 +1,6 @@
 {
   "model": "gpt-5-mini",
+  "_comment_model": "Optional: If omitted, uses currently selected Copilot model",
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",

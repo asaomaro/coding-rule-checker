@@ -125,6 +125,8 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
         currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
         currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
         currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
+        currentIssueSection = currentIssueSection.replace(/{detectionCount}/g, (issue.detectionCount || 0).toString());
+        currentIssueSection = currentIssueSection.replace(/{totalIterations}/g, (issue.totalIterations || 1).toString());
 
         // Apply indentation to multi-line code snippets
         const indentedCodeSnippet = indentMultilineText(issue.codeSnippet, currentIssueSection, '{codeSnippet}');
@@ -224,7 +226,10 @@ export function formatForChat(result: ReviewResult): string {
 
     for (const issue of chapter.issues.slice(0, 3)) {
       // Show first 3 issues
-      output += `- Line ${issue.lineNumber}: ${issue.reason}\n`;
+      const detectionInfo = issue.detectionCount && issue.totalIterations
+        ? ` [${issue.detectionCount}/${issue.totalIterations}]`
+        : '';
+      output += `- Line ${issue.lineNumber}${detectionInfo}: ${issue.reason}\n`;
     }
 
     if (chapter.issues.length > 3) {

@@ -18,6 +18,10 @@
 
 {chapterContent}
 
+## Common Instructions
+
+{commonInstructions}
+
 ## Instructions
 
 Please review the above code against the coding rules specified in the chapter.

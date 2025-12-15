@@ -7,6 +7,107 @@ import { CodeToReview, DiffInfo, DiffLine, SourceType } from './types';
 const execAsync = promisify(exec);
 
 /**
+ * Default patterns to exclude when scanning folders
+ */
+const DEFAULT_EXCLUDE_PATTERNS = [
+  'node_modules',
+  '.git',
+  '.vscode',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  'coverage',
+  '.nyc_output',
+  'vendor',
+  '__pycache__',
+  '.pytest_cache',
+  '.mypy_cache'
+];
+
+/**
+ * Checks if a path is a directory
+ */
+export async function isDirectory(filePath: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(filePath);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Recursively retrieves all files from a folder
+ */
+async function getAllFilesRecursive(
+  dirPath: string,
+  excludePatterns: string[] = DEFAULT_EXCLUDE_PATTERNS
+): Promise<string[]> {
+  const files: string[] = [];
+
+  async function traverse(currentPath: string) {
+    const entries = await fs.readdir(currentPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentPath, entry.name);
+
+      // Check if this path should be excluded
+      const shouldExclude = excludePatterns.some(pattern =>
+        entry.name === pattern || fullPath.includes(path.sep + pattern + path.sep)
+      );
+
+      if (shouldExclude) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        await traverse(fullPath);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  await traverse(dirPath);
+  return files;
+}
+
+/**
+ * Retrieves all code files from a local folder
+ */
+export async function getLocalFolderFiles(
+  folderPath: string,
+  targetExtensions?: string[]
+): Promise<CodeToReview[]> {
+  // Get all files in the folder recursively
+  const allFiles = await getAllFilesRecursive(folderPath);
+
+  // Filter by extensions if specified
+  let filteredFiles = allFiles;
+  if (targetExtensions && targetExtensions.length > 0) {
+    filteredFiles = allFiles.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return targetExtensions.includes(ext);
+    });
+  }
+
+  // Load content for each file
+  const codeFiles: CodeToReview[] = [];
+  for (const filePath of filteredFiles) {
+    try {
+      const code = await getLocalFileContent(filePath);
+      codeFiles.push(code);
+    } catch (error) {
+      console.warn(`[getLocalFolderFiles] Failed to read file: ${filePath}`, error);
+      // Skip files that can't be read
+    }
+  }
+
+  return codeFiles;
+}
+
+/**
  * Retrieves code from a local file
  */
 export async function getLocalFileContent(filePath: string): Promise<CodeToReview> {

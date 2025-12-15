@@ -32,6 +32,7 @@ export async function reviewCodeParallel(
   systemPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
+  commonInstructions: string,
   model: vscode.LanguageModelChat,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult> {
@@ -57,6 +58,7 @@ export async function reviewCodeParallel(
       systemPrompt,
       reviewPromptTemplate,
       falsePositivePromptTemplate,
+      commonInstructions,
       model,
       undefined  // Don't pass progressCallback to individual iterations
     );
@@ -102,6 +104,7 @@ async function reviewChapter(
   systemPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
+  commonInstructions: string,
   model: vscode.LanguageModelChat,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ChapterReviewResult> {
@@ -121,6 +124,7 @@ async function reviewChapter(
         chapter,
         systemPrompt,
         reviewPromptTemplate,
+        commonInstructions,
         i,
         model,
         progressCallback
@@ -131,7 +135,10 @@ async function reviewChapter(
   const iterations = await Promise.all(iterationPromises);
 
   // Aggregate results from multiple iterations
-  let issues = aggregateReviewIterations(iterations);
+  const aggregationThreshold = ruleSettings.aggregationThreshold !== undefined
+    ? ruleSettings.aggregationThreshold
+    : 0.5;  // Default: majority (50%)
+  let issues = aggregateReviewIterations(iterations, aggregationThreshold);
 
   // Perform false positive checks in parallel
   if (falsePositiveIterations > 0 && issues.length > 0) {
@@ -176,6 +183,7 @@ export async function reviewMultipleFiles(
   systemPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
+  commonInstructions: string,
   model: vscode.LanguageModelChat,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult[]> {
@@ -194,6 +202,7 @@ export async function reviewMultipleFiles(
         systemPrompt,
         reviewPromptTemplate,
         falsePositivePromptTemplate,
+        commonInstructions,
         model,
         progressCallback
       )

@@ -3,7 +3,9 @@
 ## File Information
 
 - File Name: {fileName}
+- File Path: {filePath}
 - Line Number: {lineNumber}
+- Language: {language}
 
 ## Code Snippet
 
