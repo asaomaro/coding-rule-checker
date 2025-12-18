@@ -20,7 +20,8 @@
       "Bash(copy coding-rule-checker-0.1.0.vsix coding-rule-checker-0.1.0.zip)",
       "Bash(powershell -Command \"Expand-Archive -Path coding-rule-checker-0.1.0.zip -DestinationPath vsix-extract -Force\")",
       "Bash(npm run generate-icons:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

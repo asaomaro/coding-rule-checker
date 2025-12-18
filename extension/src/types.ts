@@ -161,7 +161,7 @@ export type SourceType = 'local' | 'github';
  */
 export interface ReviewRequest {
   sourceType: SourceType;
-  fileOrUrl: string;
+  filesOrUrls: string[];  // Changed to array to support multiple files
   reviewType: 'all' | 'diff';
   diffRange?: string;
 }

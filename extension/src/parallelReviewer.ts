@@ -45,12 +45,21 @@ export async function reviewCodeParallel(
     progressCallback({
       current: 0,
       total: totalChapters,
-      message: `Processing ${totalChapters} chapters in parallel...`
+      message: `[${code.fileName}] [${rulesetName}] Processing ${totalChapters} chapters in parallel...`
     });
   }
 
   // Process all chapters in parallel with progress tracking
   const chapterPromises = chapters.map(async (chapter, index) => {
+    // Show chapter start progress
+    if (progressCallback) {
+      progressCallback({
+        current: completedChapters,
+        total: totalChapters,
+        message: `[${code.fileName}] [${rulesetName}] Chapter ${chapter.id}: ${chapter.title} - Starting...`
+      });
+    }
+
     const result = await reviewChapter(
       code,
       chapter,
@@ -69,7 +78,7 @@ export async function reviewCodeParallel(
       progressCallback({
         current: completedChapters,
         total: totalChapters,
-        message: `Completed ${completedChapters}/${totalChapters} chapters (Chapter ${chapter.id}: ${chapter.title})`
+        message: `[${code.fileName}] [${rulesetName}] Chapter ${chapter.id}: ${chapter.title} - Completed (${completedChapters}/${totalChapters})`
       });
     }
 
@@ -193,6 +202,19 @@ export async function reviewMultipleFiles(
   const CONCURRENT_LIMIT = 3;
   for (let i = 0; i < files.length; i += CONCURRENT_LIMIT) {
     const batch = files.slice(i, i + CONCURRENT_LIMIT);
+
+    // Show batch progress
+    if (progressCallback) {
+      const batchNumber = Math.floor(i / CONCURRENT_LIMIT) + 1;
+      const totalBatches = Math.ceil(files.length / CONCURRENT_LIMIT);
+      const fileNames = batch.map(f => f.fileName).join(', ');
+      progressCallback({
+        current: i,
+        total: files.length,
+        message: `Processing batch ${batchNumber}/${totalBatches} - Files: ${fileNames}`
+      });
+    }
+
     const batchPromises = batch.map((file) =>
       reviewCodeParallel(
         file,

@@ -8,6 +8,7 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 - GitHub Copilot Chatとシームレスに連携
 - ローカルファイルとGitHubリポジトリの両方をサポート
 - ファイル全体または差分のみをレビュー
+- 複数ファイルの同時指定・レビューが可能
 - 高速なレビューのための並列処理
 - ノイズを減らすための偽陽性検出
 - カスタマイズ可能なレビューテンプレートとプロンプト
@@ -152,15 +153,27 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 ### /review コマンド（ファイル全体をレビュー）
 
 ```bash
-# ローカルファイルをレビュー
+# ローカルファイルをレビュー（#fileとタイプしてファイルを選択）
 @coding-rule-checker /review #file
 
-# フォルダ内の全ファイルをレビュー（再帰的）
+# 複数のファイルを一度にレビュー（#fileを複数回使用）
+@coding-rule-checker /review #file #file #file
+
+# フォルダ内の全ファイルをレビュー（#folderとタイプしてフォルダを選択）
 @coding-rule-checker /review #folder
 
-# GitHubのファイルをレビュー
+# GitHubのファイルをレビュー（URLを直接貼り付け）
 @coding-rule-checker /review https://github.com/owner/repo/blob/main/src/index.ts
+
+# 複数のGitHubファイルを同時にレビュー（URLを空白区切りで指定）
+@coding-rule-checker /review https://github.com/owner/repo/blob/main/src/file1.ts https://github.com/owner/repo/blob/main/src/file2.ts
 ```
+
+**ローカルファイル指定の重要な注意点：**
+- ローカルファイルを指定する場合は、必ず`#file`や`#folder`を使用してください
+- `#file`とタイプすると、VSCodeがファイル選択ダイアログを表示します
+- ファイル名を直接テキストで書くことはできません（ブランチ名と区別できないため）
+- GitHub URLは`https://`で始まるため、`#file`なしで直接指定できます
 
 ### /diff コマンド（差分のみをレビュー）
 
@@ -168,10 +181,16 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 # 未コミットの変更をレビュー（全ファイル）
 @coding-rule-checker /diff
 
-# 未コミットの変更をレビュー（特定ファイル）
+# 未コミットの変更をレビュー（特定ファイルのみ、#fileで選択）
 @coding-rule-checker /diff #file
 
-# ブランチ間の差分をレビュー
+# 複数のファイルの差分を一度にレビュー（#fileを複数回使用）
+@coding-rule-checker /diff #file #file #file
+
+# ブランチ間の差分をレビュー（全ファイル）
+@coding-rule-checker /diff main..feature
+
+# ブランチ間の差分をレビュー（特定ファイルのみ）
 @coding-rule-checker /diff main..feature #file
 
 # コミットハッシュ間の差分をレビュー
@@ -183,12 +202,32 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 # GitHubコミットの差分をレビュー
 @coding-rule-checker /diff https://github.com/owner/repo/commit/abc123def456
 
+# GitHubコミットの差分をレビュー（特定ファイルのみ）
+@coding-rule-checker /diff https://github.com/owner/repo/commit/abc123def456 File1.java
+
+# GitHubコミットの差分をレビュー（複数ファイル指定）
+@coding-rule-checker /diff https://github.com/owner/repo/commit/abc123def456 File1.java File2.java
+
 # GitHub Compare（ブランチ比較）
 @coding-rule-checker /diff https://github.com/owner/repo/compare/main...feature
+
+# GitHub Compare（特定ファイルのみ）
+@coding-rule-checker /diff https://github.com/owner/repo/compare/main...feature src/File1.java
+
+# GitHub Compare（複数ファイル指定）
+@coding-rule-checker /diff https://github.com/owner/repo/compare/main...feature src/File1.java src/File2.java
 
 # プルリクエストの差分をレビュー（gh CLIを使用）
 gh pr diff 123 | @coding-rule-checker /diff
 ```
+
+**diff コマンドの重要な注意点：**
+- ローカルファイルを指定する場合は、必ず`#file`を使用してください
+- `#file`とタイプすると、VSCodeがファイル選択ダイアログを表示します
+- ファイル名を直接テキストで書くと、ブランチ名やdiff rangeと区別できません
+  - ❌ 誤：`@coding-rule-checker /diff codeRetriever.ts`（動作しません）
+  - ✅ 正：`@coding-rule-checker /diff #file`（codeRetriever.tsを選択）
+- GitHub URLは`https://`で始まるため、`#file`なしで直接指定できます
 
 ## 仕組み
 
@@ -200,6 +239,14 @@ gh pr diff 123 | @coding-rule-checker /diff
 6. **出力**: 結果をチャットに表示し、オプションでファイルに保存します
 
 ## 高度な機能
+
+### 複数ファイルの同時レビュー
+
+ローカルファイルだけでなく、GitHub URLでも複数のファイルを指定してレビューできます：
+- ローカル: `@coding-rule-checker /review #file1 #file2 #file3`
+- GitHub blob URL: 複数のURLを空白区切りで指定
+- GitHub commit: URLの後にファイル名を空白区切りで指定
+- GitHub compare: URLの後にファイルパスを空白区切りで指定
 
 ### 複数回のレビューイテレーション
 
@@ -216,10 +263,10 @@ gh pr diff 123 | @coding-rule-checker /diff
 ### GitHub連携
 
 `gh` CLIを使用してGitHubリポジトリからコードを取得し、以下をサポートします:
-- 特定のファイル
+- 特定のファイル（複数指定可能）
 - プルリクエスト
-- コミット範囲
-- ブランチ比較
+- コミット範囲（複数ファイル指定可能）
+- ブランチ比較（複数ファイル指定可能）
 
 ## 要件
 

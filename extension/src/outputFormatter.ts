@@ -208,7 +208,9 @@ export async function saveUnifiedReviewResults(
  * Formats review result for chat display
  */
 export function formatForChat(result: ReviewResult): string {
-  let output = `**Review completed for ${result.fileName}**\n\n`;
+  // Create clickable file:// link with file name as display text
+  const fileLink = `[${result.fileName}](file:///${result.filePath.replace(/\\/g, '/')})`;
+  let output = `**Review completed for ${fileLink}**\n\n`;
 
   if (result.totalIssues === 0) {
     output += '✅ No issues found!\n';

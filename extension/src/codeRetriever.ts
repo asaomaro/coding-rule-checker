@@ -340,7 +340,7 @@ export async function getGitHubDiff(url: string, diffRange: string): Promise<Cod
 /**
  * Retrieves compare diff from GitHub using gh CLI with optional file filtering
  */
-export async function getGitHubCompareDiff(url: string, compareRange: string, targetFilePath?: string): Promise<CodeToReview[]> {
+export async function getGitHubCompareDiff(url: string, compareRange: string, targetFilePaths?: string[]): Promise<CodeToReview[]> {
   // Parse GitHub URL to extract owner and repo
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
   if (!match) {
@@ -354,8 +354,11 @@ export async function getGitHubCompareDiff(url: string, compareRange: string, ta
   // Tags without slashes (v1.0.0, v2.1.3) work as-is
   // Tags with slashes (release/v1.0.0) would need 'tags/' prefix, but this is rare
   // Commit hashes work as-is regardless of format
-  const processedCompareRange = compareRange
-    .split('..')
+
+  // Split by .. or ... (use regex to handle both)
+  const refs = compareRange.split(/\.{2,3}/);
+
+  const processedCompareRange = refs
     .map(ref => {
       // Add 'heads/' prefix if ref contains a slash (assumes it's a branch)
       // For tag support: if tags contain slashes, they would need 'tags/' prefix
@@ -379,15 +382,17 @@ export async function getGitHubCompareDiff(url: string, compareRange: string, ta
 
   const results: CodeToReview[] = [];
 
-  // Filter files if targetFilePath is specified
+  // Filter files if targetFilePaths is specified
   let filesToProcess = response.files;
-  if (targetFilePath) {
+  if (targetFilePaths && targetFilePaths.length > 0) {
     filesToProcess = response.files.filter((file: any) =>
-      file.filename === targetFilePath || file.filename.endsWith(targetFilePath)
+      targetFilePaths.some(targetPath =>
+        file.filename === targetPath || file.filename.endsWith(targetPath)
+      )
     );
 
     if (filesToProcess.length === 0) {
-      throw new Error(`File "${targetFilePath}" not found in comparison`);
+      throw new Error(`Files "${targetFilePaths.join(', ')}" not found in comparison`);
     }
   }
 
@@ -415,7 +420,7 @@ export async function getGitHubCompareDiff(url: string, compareRange: string, ta
 /**
  * Retrieves commit diff from GitHub using gh CLI
  */
-export async function getGitHubCommitDiff(url: string, targetFileName?: string): Promise<CodeToReview[]> {
+export async function getGitHubCommitDiff(url: string, targetFileNames?: string[]): Promise<CodeToReview[]> {
   // Parse GitHub commit URL to extract owner, repo, and commit hash
   // Format: https://github.com/owner/repo/commit/hash
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/commit\/([a-f0-9]+)/);
@@ -437,15 +442,17 @@ export async function getGitHubCommitDiff(url: string, targetFileName?: string):
 
   const results: CodeToReview[] = [];
 
-  // Filter files if targetFileName is specified
+  // Filter files if targetFileNames is specified
   let filesToProcess = response.files;
-  if (targetFileName) {
+  if (targetFileNames && targetFileNames.length > 0) {
     filesToProcess = response.files.filter((file: any) =>
-      file.filename.endsWith(targetFileName) || file.filename === targetFileName
+      targetFileNames.some(targetName =>
+        file.filename.endsWith(targetName) || file.filename === targetName
+      )
     );
 
     if (filesToProcess.length === 0) {
-      throw new Error(`File "${targetFileName}" not found in commit`);
+      throw new Error(`Files "${targetFileNames.join(', ')}" not found in commit`);
     }
   }
 
