@@ -65,7 +65,16 @@ export async function performReviewIteration(
 
     // Parse the response to extract issues
     console.log('Parsing response for issues...');
-    const issues = parseReviewResponse(responseText, chapter.id);
+
+    // If it's a diff, get addition line numbers to filter out deletion line issues
+    let additionLineNumbers: number[] | undefined;
+    if (code.isDiff) {
+      const diffInfo = parseDiff(code.content);
+      additionLineNumbers = diffInfo.additions.map(line => line.lineNumber);
+      console.log('Addition line numbers:', additionLineNumbers);
+    }
+
+    const issues = parseReviewResponse(responseText, chapter.id, additionLineNumbers);
 
     console.log(`Parsed ${issues.length} issues`);
     if (issues.length > 0) {
@@ -99,10 +108,49 @@ export async function performReviewIteration(
 function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromptTemplate: string): string {
   let codeContent = code.content;
 
-  // If it's a diff, extract only added lines
+  // If it's a diff, format with diff symbols and line numbers
   if (code.isDiff) {
     const diffInfo = parseDiff(code.content);
-    codeContent = diffInfo.additions.map(line => `${line.lineNumber}: ${line.content}`).join('\n');
+    const lines: string[] = [];
+
+    // Build a complete diff view with symbols and line numbers
+    let currentLine = 0;
+    const allLines = code.content.split('\n');
+
+    for (const line of allLines) {
+      // Skip diff headers
+      if (line.startsWith('diff ') || line.startsWith('index ') ||
+          line.startsWith('---') || line.startsWith('+++')) {
+        continue;
+      }
+
+      // Parse hunk header to get line number
+      if (line.startsWith('@@')) {
+        const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
+        if (match) {
+          currentLine = parseInt(match[1], 10);
+        }
+        continue;
+      }
+
+      // Format lines with diff symbols and line numbers
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        lines.push(`+ ${currentLine}: ${line.substring(1)}`);
+        currentLine++;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        lines.push(`- ${line.substring(1)}`);
+      } else if (!line.startsWith('\\')) {
+        // Context line
+        lines.push(`  ${currentLine}: ${line}`);
+        currentLine++;
+      }
+    }
+
+    codeContent = lines.join('\n');
+  } else {
+    // Normal review: Add line numbers
+    const lines = code.content.split('\n');
+    codeContent = lines.map((line, index) => `${index + 1}: ${line}`).join('\n');
   }
 
   // Replace placeholders in template (use replaceAll to replace all occurrences)
@@ -119,8 +167,11 @@ function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromp
 
 /**
  * Parses the review response to extract issues
+ * @param responseText - The response text from the LLM
+ * @param chapterId - The chapter ID
+ * @param additionLineNumbers - Optional list of addition line numbers for diff review (to filter out deletion line issues)
  */
-function parseReviewResponse(responseText: string, chapterId: string): ReviewIssue[] {
+function parseReviewResponse(responseText: string, chapterId: string, additionLineNumbers?: number[]): ReviewIssue[] {
   const issues: ReviewIssue[] = [];
 
   try {
@@ -151,7 +202,7 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
         if (json.issues.length === 0) {
           console.log('[parseReviewResponse] WARNING: LLM returned empty issues array!');
         }
-        return json.issues.map((issue: any) => ({
+        const parsedIssues = json.issues.map((issue: any) => ({
           ruleId: issue.ruleId || chapterId,
           ruleTitle: issue.ruleTitle || '',
           lineNumber: issue.lineNumber || 0,
@@ -159,6 +210,14 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
           reason: issue.reason || '',
           suggestion: issue.suggestion || ''
         }));
+
+        // Filter out issues on deletion lines if this is a diff review
+        if (additionLineNumbers) {
+          const filtered = parsedIssues.filter((issue: ReviewIssue) => additionLineNumbers.includes(issue.lineNumber));
+          console.log(`[parseReviewResponse] Filtered ${parsedIssues.length - filtered.length} issues on deletion lines`);
+          return filtered;
+        }
+        return parsedIssues;
       } else {
         console.log('[parseReviewResponse] JSON does not contain issues array');
       }
@@ -177,10 +236,18 @@ function parseReviewResponse(responseText: string, chapterId: string): ReviewIss
       const suggestionMatch = block.match(/修正案[：:]\s*([^\n]+)/);
 
       if (lineMatch) {
+        const lineNumber = parseInt(lineMatch[1], 10);
+
+        // Filter out issues on deletion lines if this is a diff review
+        if (additionLineNumbers && !additionLineNumbers.includes(lineNumber)) {
+          console.log(`[parseReviewResponse] Skipping issue on deletion line: ${lineNumber}`);
+          continue;
+        }
+
         issues.push({
           ruleId: chapterId,
           ruleTitle: '',
-          lineNumber: parseInt(lineMatch[1], 10),
+          lineNumber: lineNumber,
           codeSnippet: snippetMatch ? snippetMatch[1].trim() : '',
           reason: reasonMatch ? reasonMatch[1].trim() : '',
           suggestion: suggestionMatch ? suggestionMatch[1].trim() : ''

@@ -3,6 +3,8 @@
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "showChaptersWithNoIssues": true,
+  "_comment_showChaptersWithNoIssues": "Optional: If true, chapters with no issues will be displayed in review results",
   "fileOutput": {
     "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",

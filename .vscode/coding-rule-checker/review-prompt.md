@@ -21,6 +21,15 @@
 ## Instructions
 
 Please review the above code against the coding rules specified in the chapter.
+
+**Important:**
+- Each line in the code is prefixed with a line number (e.g., `123: const foo = 'bar';`)
+- If the code shows diff symbols (`+`, `-`, or two spaces for context):
+  - `+` indicates an added line (review this)
+  - `-` indicates a deleted line (DO NOT review this)
+  - Two spaces indicate a context line (DO NOT review this)
+  - **ONLY review lines that start with `+`** (added lines)
+
 For each violation found:
 
 1. Identify the exact line number

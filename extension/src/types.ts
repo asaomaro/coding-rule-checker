@@ -7,6 +7,7 @@ export interface Settings {
   summaryPromptPath: string;
   rulesets: Record<string, string[]>;
   templatesPath: string;
+  showChaptersWithNoIssues?: boolean;
   fileOutput: {
     enabled: boolean;
     outputDir: string;

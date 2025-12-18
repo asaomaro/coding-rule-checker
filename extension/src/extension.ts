@@ -109,6 +109,9 @@ async function handleChatRequest(
     return;
   }
 
+  // Display the number of files to review
+  stream.markdown(`📂 Found ${codesToReview.length} file(s) to review\n`);
+
   // Process each code file
   for (const code of codesToReview) {
     stream.markdown(`\n🔍 Reviewing ${code.fileName}...\n`);
@@ -202,9 +205,11 @@ async function handleChatRequest(
     if (allResults.length > 0) {
       stream.markdown('\n\n## 📊 Review Results\n\n');
 
+      const showChaptersWithNoIssues = settings.showChaptersWithNoIssues || false;
+
       for (const result of allResults) {
         stream.markdown(`### ${result.rulesetName}\n`);
-        stream.markdown(formatForChat(result));
+        stream.markdown(formatForChat(result, showChaptersWithNoIssues));
       }
 
       // Calculate totals
@@ -235,7 +240,7 @@ async function handleChatRequest(
 
       // Show detailed results
       stream.markdown('\n---\n\n## 📋 Detailed Results\n\n');
-      stream.markdown(formatUnifiedReviewResults(allResults, template));
+      stream.markdown(formatUnifiedReviewResults(allResults, template, showChaptersWithNoIssues));
     }
   }
 
