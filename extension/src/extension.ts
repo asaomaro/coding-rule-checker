@@ -28,6 +28,7 @@ import {
   saveUnifiedReviewResults
 } from './outputFormatter';
 import { ReviewRequest, CodeToReview, RuleChapter, Settings, RuleSettings } from './types';
+import * as logger from './logger';
 
 const PARTICIPANT_ID = 'coding-rule-checker';
 let extensionContext: vscode.ExtensionContext;
@@ -35,11 +36,16 @@ let extensionContext: vscode.ExtensionContext;
 export function activate(context: vscode.ExtensionContext) {
   extensionContext = context;
 
+  // Initialize logger
+  logger.initializeLogger('Coding Rule Checker');
+  logger.log('Extension activated');
+
   // Register chat participant
   const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, async (request, chatContext, stream, token) => {
     try {
       await handleChatRequest(request, chatContext, stream, token);
     } catch (error) {
+      logger.error('Chat request failed:', error);
       stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}\n\n`);
     }
   });
@@ -59,8 +65,8 @@ async function handleChatRequest(
 
   if (!command) {
     stream.markdown('Please use one of the following commands:\n');
-    stream.markdown('- `/reviewAll #file` - Review all code in the specified file\n');
-    stream.markdown('- `/reviewDiff [range] #file` - Review diff code (optionally specify diff range)\n');
+    stream.markdown('- `/review #file` - Review all code in the specified file\n');
+    stream.markdown('- `/diff [range] #file` - Review diff code (optionally specify diff range)\n');
     return;
   }
 
@@ -222,19 +228,19 @@ async function handleChatRequest(
       // Save unified results to file if enabled and workspace is open
       if (isWorkspaceOpen && settings.fileOutput.enabled) {
         try {
-          console.log('Attempting to save unified review results...');
+          logger.log('Attempting to save unified review results...');
           const outputPath = await saveUnifiedReviewResults(allResults, settings, workspaceRoot, template);
-          console.log('Review results saved successfully to:', outputPath);
-          stream.markdown(`\n💾 Review results saved to: ${outputPath}\n`);
+          logger.log('Review results saved successfully to:', outputPath);
+          stream.markdown(`\n💾 Review results saved to: [${path.basename(outputPath)}](${vscode.Uri.file(outputPath)})\n`);
         } catch (error) {
-          console.error('Failed to save review results:', error);
+          logger.error('Failed to save review results:', error);
           stream.markdown(`\n⚠️ Failed to save review results: ${error instanceof Error ? error.message : String(error)}\n`);
         }
       } else {
         if (!isWorkspaceOpen) {
-          console.log('File output skipped: No workspace open');
+          logger.log('File output skipped: No workspace open');
         } else if (!settings.fileOutput.enabled) {
-          console.log('File output skipped: Disabled in settings');
+          logger.log('File output skipped: Disabled in settings');
         }
       }
 
@@ -252,200 +258,295 @@ function parseReviewRequest(request: vscode.ChatRequest, command: string): Revie
   const parts = text.split(/\s+/);
 
   let fileOrUrl = '';
+  let filesOrUrls: string[] = [];
   let diffRange: string | undefined;
 
-  console.log('[parseReviewRequest] Parsing request...');
-  console.log('[parseReviewRequest] Prompt text:', text);
-  console.log('[parseReviewRequest] Command:', command);
-  console.log('[parseReviewRequest] References count:', request.references.length);
+  logger.log('[parseReviewRequest] Parsing request...');
+  logger.log('[parseReviewRequest] Prompt text:', text);
+  logger.log('[parseReviewRequest] Command:', command);
+  logger.log('[parseReviewRequest] References count:', request.references.length);
 
-  // Priority 1: Check for GitHub URL in prompt text (highest priority)
-  const urlMatch = text.match(/(https?:\/\/github\.com\/[^\s]+)/);
-  if (urlMatch) {
-    fileOrUrl = urlMatch[1];
-    console.log('[parseReviewRequest] Found GitHub URL in text:', fileOrUrl);
+  // Priority 1: Check for GitHub URL(s) in prompt text (highest priority)
+  const urlMatches = text.matchAll(/(https?:\/\/github\.com\/[^\s]+)/g);
+  const urls = Array.from(urlMatches, m => m[1]);
 
-    // Check if it's a compare URL
-    const compareMatch = fileOrUrl.match(/github\.com\/([^/]+)\/([^/]+)\/compare\/(.+)/);
-    if (compareMatch) {
-      console.log('[parseReviewRequest] Detected compare URL');
-      const [, owner, repo, compareRange] = compareMatch;
+  if (urls.length > 0) {
+    logger.log('[parseReviewRequest] Found', urls.length, 'GitHub URL(s) in text');
+    filesOrUrls = urls;
+    fileOrUrl = urls[0]; // First URL as primary
 
-      // Store the base repo URL and the comparison range
-      fileOrUrl = `https://github.com/${owner}/${repo}`;
-      diffRange = compareRange;
-      console.log('[parseReviewRequest] Extracted repo URL:', fileOrUrl);
-      console.log('[parseReviewRequest] Extracted compare range:', diffRange);
+    // Check if it's a compare URL (only for single URL)
+    if (urls.length === 1) {
+      const compareMatch = fileOrUrl.match(/github\.com\/([^/]+)\/([^/]+)\/compare\/(.+)/);
+      if (compareMatch) {
+        logger.log('[parseReviewRequest] Detected compare URL');
+        const [, owner, repo, compareRange] = compareMatch;
 
-      // Extract optional file name from the rest of the text
-      const urlIndex = text.indexOf(urlMatch[1]);
-      const afterUrl = text.substring(urlIndex + urlMatch[1].length).trim();
-
-      // Look for a file path (something with slashes and ending with an extension)
-      const filePathMatch = afterUrl.match(/([^\s]+\.\w+)/);
-      if (filePathMatch) {
-        const targetFilePath = filePathMatch[1];
-        console.log('[parseReviewRequest] Target file path:', targetFilePath);
-        // Store the file path for filtering
-        diffRange = `${compareRange}:FILE:${targetFilePath}`;
-      }
-    }
-    // Check if it's a commit URL
-    else {
-      const commitMatch = fileOrUrl.match(/github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/);
-      if (commitMatch) {
-        console.log('[parseReviewRequest] Detected commit URL');
+        // Store the base repo URL and the comparison range
+        fileOrUrl = `https://github.com/${owner}/${repo}`;
+        filesOrUrls = [fileOrUrl];
+        diffRange = compareRange;
+        logger.log('[parseReviewRequest] Extracted repo URL:', fileOrUrl);
+        logger.log('[parseReviewRequest] Extracted compare range:', diffRange);
 
         // Extract optional file name from the rest of the text
-        const urlIndex = text.indexOf(fileOrUrl);
-        const afterUrl = text.substring(urlIndex + fileOrUrl.length).trim();
+        const urlIndex = text.indexOf(urls[0]);
+        const afterUrl = text.substring(urlIndex + urls[0].length).trim();
 
-        // Look for a file name (something ending with an extension)
-        const fileNameMatch = afterUrl.match(/([^\s]+\.\w+)/);
-        if (fileNameMatch) {
-          const targetFileName = fileNameMatch[1];
-          console.log('[parseReviewRequest] Target file name:', targetFileName);
-          // Store the file name in diffRange temporarily (we'll handle this specially)
-          diffRange = `FILE:${targetFileName}`;
+        // Look for a file path (something with slashes and ending with an extension)
+        const filePathMatch = afterUrl.match(/([^\s]+\.\w+)/);
+        if (filePathMatch) {
+          const targetFilePath = filePathMatch[1];
+          logger.log('[parseReviewRequest] Target file path:', targetFilePath);
+          // Store the file path for filtering
+          diffRange = `${compareRange}:FILE:${targetFilePath}`;
         }
       }
+      // Check if it's a commit URL
+      else {
+        const commitMatch = fileOrUrl.match(/github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/);
+        if (commitMatch) {
+          logger.log('[parseReviewRequest] Detected commit URL');
+
+          // Extract optional file name from the rest of the text
+          const urlIndex = text.indexOf(fileOrUrl);
+          const afterUrl = text.substring(urlIndex + fileOrUrl.length).trim();
+
+          // Look for a file name (something ending with an extension)
+          const fileNameMatch = afterUrl.match(/([^\s]+\.\w+)/);
+          if (fileNameMatch) {
+            const targetFileName = fileNameMatch[1];
+            logger.log('[parseReviewRequest] Target file name:', targetFileName);
+            // Store the file name in diffRange temporarily (we'll handle this specially)
+            diffRange = `FILE:${targetFileName}`;
+          }
+        }
+      }
+    } else {
+      // Multiple URLs - log them all
+      urls.forEach((url, index) => {
+        logger.log(`[parseReviewRequest] URL ${index + 1}:`, url);
+      });
     }
   }
 
-  // Priority 2: Extract file references
+  // Priority 2: Extract file references (support multiple files)
   if (!fileOrUrl) {
     for (const ref of request.references) {
-      console.log('[parseReviewRequest] Processing reference:', ref);
+      logger.log('[parseReviewRequest] Processing reference:', ref);
       if (ref.value && typeof ref.value === 'object' && 'uri' in ref.value) {
-        fileOrUrl = (ref.value as any).uri.fsPath;
-        console.log('[parseReviewRequest] Found file reference:', fileOrUrl);
-        break;
+        const filePath = (ref.value as any).uri.fsPath;
+        filesOrUrls.push(filePath);
+        logger.log('[parseReviewRequest] Found file reference:', filePath);
       }
+    }
+
+    // Set first file as primary fileOrUrl for backward compatibility
+    if (filesOrUrls.length > 0) {
+      fileOrUrl = filesOrUrls[0];
+      logger.log('[parseReviewRequest] Primary file:', fileOrUrl);
+      logger.log('[parseReviewRequest] Total files:', filesOrUrls.length);
     }
   }
 
   // Priority 3: Fall back to active editor (lowest priority)
   if (!fileOrUrl && vscode.window.activeTextEditor) {
     fileOrUrl = vscode.window.activeTextEditor.document.uri.fsPath;
-    console.log('[parseReviewRequest] Using active editor file:', fileOrUrl);
+    filesOrUrls = [fileOrUrl];
+    logger.log('[parseReviewRequest] Using active editor file:', fileOrUrl);
   }
 
   if (!fileOrUrl) {
-    console.log('[parseReviewRequest] WARNING: No file reference found!');
+    logger.log('[parseReviewRequest] WARNING: No file reference found!');
   }
 
   // Parse diff range if present (only if not already set by URL parsing)
-  if (command === 'reviewDiff' && !diffRange) {
+  if (command === 'diff' && !diffRange) {
     // Look for patterns like "main..feature", tags "v1.0.0..v2.0.0", relative refs "HEAD^..main", etc.
     // Supports: branches, tags, commit hashes, relative refs (HEAD^, HEAD~3, @~2, HEAD@{yesterday})
     const rangeMatch = text.match(/([\w.\/~^@{}\-]+\.\.+[\w.\/~^@{}\-]+)/);
     if (rangeMatch) {
       diffRange = rangeMatch[1];
-      console.log('[parseReviewRequest] Found diff range:', diffRange);
+      logger.log('[parseReviewRequest] Found diff range:', diffRange);
     }
   }
 
   const sourceType = determineSourceType(fileOrUrl);
-  const reviewType = command === 'reviewAll' ? 'all' : 'diff';
+  const reviewType = command === 'review' ? 'all' : 'diff';
 
   return {
     sourceType,
     fileOrUrl,
+    filesOrUrls,
     reviewType,
     diffRange
   };
 }
 
+/**
+ * Gets all reviewable files in a folder recursively
+ */
+async function getFilesInFolder(folderPath: string): Promise<CodeToReview[]> {
+  const codes: CodeToReview[] = [];
+  const uri = vscode.Uri.file(folderPath);
+
+  // Common file extensions to review
+  const reviewableExtensions = [
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+    '.py', '.java', '.cs', '.cpp', '.c', '.h', '.hpp',
+    '.go', '.rs', '.rb', '.php', '.swift', '.kt'
+  ];
+
+  // Common folders to exclude
+  const excludeFolders = ['node_modules', '.git', 'dist', 'build', 'out', '.vscode', 'coverage'];
+
+  async function scanDirectory(dirUri: vscode.Uri): Promise<void> {
+    try {
+      const entries = await vscode.workspace.fs.readDirectory(dirUri);
+
+      for (const [name, type] of entries) {
+        const entryUri = vscode.Uri.joinPath(dirUri, name);
+
+        if (type === vscode.FileType.Directory) {
+          // Skip excluded folders
+          if (!excludeFolders.includes(name)) {
+            await scanDirectory(entryUri);
+          }
+        } else if (type === vscode.FileType.File) {
+          // Check if file has reviewable extension
+          const hasReviewableExt = reviewableExtensions.some(ext => name.endsWith(ext));
+          if (hasReviewableExt) {
+            try {
+              const code = await getLocalFileContent(entryUri.fsPath);
+              codes.push(code);
+            } catch (error) {
+              logger.error(`Failed to load file ${entryUri.fsPath}:`, error);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(`Failed to scan directory ${dirUri.fsPath}:`, error);
+    }
+  }
+
+  await scanDirectory(uri);
+  return codes;
+}
+
 async function getCodeToReview(request: ReviewRequest, workspaceRoot: string): Promise<CodeToReview[]> {
   const codes: CodeToReview[] = [];
 
-  console.log('[getCodeToReview] Request:', {
+  logger.log('[getCodeToReview] Request:', {
     sourceType: request.sourceType,
     fileOrUrl: request.fileOrUrl,
+    filesOrUrls: request.filesOrUrls,
     reviewType: request.reviewType,
     diffRange: request.diffRange
   });
 
   if (request.sourceType === 'github') {
-    // Check if it's a commit URL
-    const isCommitUrl = request.fileOrUrl.match(/github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/);
+    // Process all GitHub URLs
+    for (const url of request.filesOrUrls) {
+      logger.log('[getCodeToReview] Processing GitHub URL:', url);
 
-    if (isCommitUrl) {
-      console.log('[getCodeToReview] Processing GitHub commit URL...');
+      // Check if it's a commit URL
+      const isCommitUrl = url.match(/github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/);
 
-      // Extract target file name if specified
-      let targetFileName: string | undefined;
-      if (request.diffRange?.startsWith('FILE:')) {
-        targetFileName = request.diffRange.substring(5);
-        console.log('[getCodeToReview] Filtering for file:', targetFileName);
-      }
+      if (isCommitUrl) {
+        logger.log('[getCodeToReview] Processing GitHub commit URL...');
 
-      const commitCodes = await getGitHubCommitDiff(request.fileOrUrl, targetFileName);
-      codes.push(...commitCodes);
-      console.log('[getCodeToReview] Loaded', commitCodes.length, 'file(s) from commit');
-    } else if (request.reviewType === 'all') {
-      console.log('[getCodeToReview] Processing GitHub file URL...');
-      const code = await getGitHubFileContent(request.fileOrUrl);
-      codes.push(code);
-    } else {
-      console.log('[getCodeToReview] Processing GitHub diff/compare...');
-      if (!request.diffRange) {
-        throw new Error('Diff range is required for GitHub diff review');
-      }
+        // Extract target file name if specified (only for single URL with diffRange)
+        let targetFileName: string | undefined;
+        if (request.filesOrUrls.length === 1 && request.diffRange?.startsWith('FILE:')) {
+          targetFileName = request.diffRange.substring(5);
+          logger.log('[getCodeToReview] Filtering for file:', targetFileName);
+        }
 
-      // Check if diffRange contains file filter (format: "range:FILE:filepath")
-      let compareRange = request.diffRange;
-      let targetFilePath: string | undefined;
-
-      if (request.diffRange.includes(':FILE:')) {
-        const parts = request.diffRange.split(':FILE:');
-        compareRange = parts[0];
-        targetFilePath = parts[1];
-        console.log('[getCodeToReview] Compare range:', compareRange);
-        console.log('[getCodeToReview] Target file path:', targetFilePath);
-
-        // Use getGitHubCompareDiff for file filtering
-        const compareCodes = await getGitHubCompareDiff(request.fileOrUrl, compareRange, targetFilePath);
-        codes.push(...compareCodes);
-        console.log('[getCodeToReview] Loaded', compareCodes.length, 'file(s) from comparison');
-      } else {
-        // Use original getGitHubDiff for backward compatibility
-        const code = await getGitHubDiff(request.fileOrUrl, request.diffRange);
+        const commitCodes = await getGitHubCommitDiff(url, targetFileName);
+        codes.push(...commitCodes);
+        logger.log('[getCodeToReview] Loaded', commitCodes.length, 'file(s) from commit');
+      } else if (request.reviewType === 'all') {
+        logger.log('[getCodeToReview] Processing GitHub file URL...');
+        const code = await getGitHubFileContent(url);
         codes.push(code);
+      } else {
+        // Diff mode - only supported for single URL
+        if (request.filesOrUrls.length > 1) {
+          logger.log('[getCodeToReview] WARNING: Diff mode with multiple URLs not supported, skipping:', url);
+          continue;
+        }
+
+        logger.log('[getCodeToReview] Processing GitHub diff/compare...');
+        if (!request.diffRange) {
+          throw new Error('Diff range is required for GitHub diff review');
+        }
+
+        // Check if diffRange contains file filter (format: "range:FILE:filepath")
+        let compareRange = request.diffRange;
+        let targetFilePath: string | undefined;
+
+        if (request.diffRange.includes(':FILE:')) {
+          const parts = request.diffRange.split(':FILE:');
+          compareRange = parts[0];
+          targetFilePath = parts[1];
+          logger.log('[getCodeToReview] Compare range:', compareRange);
+          logger.log('[getCodeToReview] Target file path:', targetFilePath);
+
+          // Use getGitHubCompareDiff for file filtering
+          const compareCodes = await getGitHubCompareDiff(url, compareRange, targetFilePath);
+          codes.push(...compareCodes);
+          logger.log('[getCodeToReview] Loaded', compareCodes.length, 'file(s) from comparison');
+        } else {
+          // Use original getGitHubDiff for backward compatibility
+          const code = await getGitHubDiff(url, request.diffRange);
+          codes.push(code);
+        }
       }
     }
   } else {
-    // Local file
-    console.log('[getCodeToReview] Processing local file...');
+    // Local file(s) or folder
+    logger.log('[getCodeToReview] Processing local file(s)...');
     if (request.reviewType === 'all') {
-      console.log('[getCodeToReview] Review type: all');
-      if (request.fileOrUrl) {
-        console.log('[getCodeToReview] Loading file content:', request.fileOrUrl);
-        const code = await getLocalFileContent(request.fileOrUrl);
-        codes.push(code);
-        console.log('[getCodeToReview] File loaded successfully');
-      } else {
-        console.log('[getCodeToReview] ERROR: No file specified for reviewAll');
+      logger.log('[getCodeToReview] Review type: all');
+
+      // Process all files/folders in filesOrUrls
+      for (const fileOrFolder of request.filesOrUrls) {
+        const stat = await vscode.workspace.fs.stat(vscode.Uri.file(fileOrFolder));
+
+        if (stat.type === vscode.FileType.Directory) {
+          // It's a folder - get all reviewable files
+          logger.log('[getCodeToReview] Processing folder:', fileOrFolder);
+          const folderCodes = await getFilesInFolder(fileOrFolder);
+          codes.push(...folderCodes);
+          logger.log('[getCodeToReview] Loaded', folderCodes.length, 'file(s) from folder');
+        } else {
+          // It's a file
+          logger.log('[getCodeToReview] Loading file content:', fileOrFolder);
+          const code = await getLocalFileContent(fileOrFolder);
+          codes.push(code);
+          logger.log('[getCodeToReview] File loaded successfully');
+        }
       }
     } else {
-      console.log('[getCodeToReview] Review type: diff');
+      logger.log('[getCodeToReview] Review type: diff');
       // Diff mode
       if (request.fileOrUrl) {
-        console.log('[getCodeToReview] Loading file diff:', request.fileOrUrl);
+        logger.log('[getCodeToReview] Loading file diff:', request.fileOrUrl);
         const code = await getLocalFileDiff(workspaceRoot, request.fileOrUrl, request.diffRange);
         codes.push(code);
-        console.log('[getCodeToReview] Diff loaded successfully');
+        logger.log('[getCodeToReview] Diff loaded successfully');
       } else {
-        console.log('[getCodeToReview] Loading all changed files...');
+        logger.log('[getCodeToReview] Loading all changed files...');
         // Review all changed files
         const allCodes = await getAllFilesDiff(workspaceRoot, request.diffRange);
         codes.push(...allCodes);
-        console.log('[getCodeToReview] Loaded', allCodes.length, 'changed files');
+        logger.log('[getCodeToReview] Loaded', allCodes.length, 'changed files');
       }
     }
   }
 
-  console.log('[getCodeToReview] Total codes to review:', codes.length);
+  logger.log('[getCodeToReview] Total codes to review:', codes.length);
   return codes;
 }
 

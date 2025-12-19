@@ -36,5 +36,14 @@ For each violation found:
 2. Extract the problematic code snippet
 3. Explain why it violates the rule
 4. Provide a concrete suggestion for fixing it
+5. **Provide a fixed code example** showing the corrected code
 
 Output your findings in JSON format as specified in the system prompt.
+
+**Remember:** Each issue must include both `codeSnippet` (the problematic code) and `fixedCodeSnippet` (the corrected code example).
+
+**Code Snippet Extraction Rules:**
+- Extract ONLY the pure source code
+- Remove line number prefixes (e.g., `123: const x = 1;` → `const x = 1;`)
+- Remove diff symbols (e.g., `+ console.log('hi');` → `console.log('hi');`)
+- Do NOT include any metadata, annotations, or formatting markers in the code snippets

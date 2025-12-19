@@ -8,6 +8,7 @@ import {
   ProgressInfo
 } from './types';
 import { parseDiff } from './codeRetriever';
+import * as logger from './logger';
 
 /**
  * Performs a single review iteration for a chapter
@@ -31,22 +32,22 @@ export async function performReviewIteration(
   ];
 
   // Progress is now handled at chapter level, not iteration level
-  console.log(`\n=== Sending review request for chapter ${chapter.id}: ${chapter.title} (iteration ${iterationNumber}) ===`);
-  console.log('Model info:', { family: model.family, name: model.name, vendor: model.vendor });
-  console.log('System prompt length:', systemPrompt.length);
-  console.log('Review prompt length:', prompt.length);
-  console.log('Messages count:', messages.length);
-  console.log('Code content length:', code.content.length);
-  console.log('Code file name:', code.fileName);
+  logger.log(`\n=== Sending review request for chapter ${chapter.id}: ${chapter.title} (iteration ${iterationNumber}) ===`);
+  logger.log('Model info:', { family: model.family, name: model.name, vendor: model.vendor });
+  logger.log('System prompt length:', systemPrompt.length);
+  logger.log('Review prompt length:', prompt.length);
+  logger.log('Messages count:', messages.length);
+  logger.log('Code content length:', code.content.length);
+  logger.log('Code file name:', code.fileName);
 
   try {
-    console.log('Calling model.sendRequest...');
+    logger.log('Calling model.sendRequest...');
     const startTime = Date.now();
     const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
     const requestTime = Date.now() - startTime;
-    console.log(`Request returned after ${requestTime}ms`);
+    logger.log(`Request returned after ${requestTime}ms`);
 
-    console.log('Streaming response text...');
+    logger.log('Streaming response text...');
 
     // Parse response
     let responseText = '';
@@ -55,36 +56,36 @@ export async function performReviewIteration(
       fragmentCount++;
       responseText += fragment;
       if (fragmentCount <= 3) {
-        console.log(`Fragment ${fragmentCount}:`, fragment.substring(0, 100));
+        logger.log(`Fragment ${fragmentCount}:`, fragment.substring(0, 100));
       }
     }
 
-    console.log(`Response received. Total fragments: ${fragmentCount}, Total length: ${responseText.length}`);
-    console.log('Response preview (first 500 chars):', responseText.substring(0, 500));
-    console.log('Response preview (last 200 chars):', responseText.substring(Math.max(0, responseText.length - 200)));
+    logger.log(`Response received. Total fragments: ${fragmentCount}, Total length: ${responseText.length}`);
+    logger.log('Response preview (first 500 chars):', responseText.substring(0, 500));
+    logger.log('Response preview (last 200 chars):', responseText.substring(Math.max(0, responseText.length - 200)));
 
     // Parse the response to extract issues
-    console.log('Parsing response for issues...');
+    logger.log('Parsing response for issues...');
 
     // If it's a diff, get addition line numbers to filter out deletion line issues
     let additionLineNumbers: number[] | undefined;
     if (code.isDiff) {
       const diffInfo = parseDiff(code.content);
       additionLineNumbers = diffInfo.additions.map(line => line.lineNumber);
-      console.log('Addition line numbers:', additionLineNumbers);
+      logger.log('Addition line numbers:', additionLineNumbers);
     }
 
     const issues = parseReviewResponse(responseText, chapter.id, additionLineNumbers);
 
-    console.log(`Parsed ${issues.length} issues`);
+    logger.log(`Parsed ${issues.length} issues`);
     if (issues.length > 0) {
-      console.log('First issue:', JSON.stringify(issues[0], null, 2));
-      console.log(`All issues: ${JSON.stringify(issues.map(i => ({ line: i.lineNumber, rule: i.ruleId })))}`);
+      logger.log('First issue:', JSON.stringify(issues[0], null, 2));
+      logger.log(`All issues: ${JSON.stringify(issues.map(i => ({ line: i.lineNumber, rule: i.ruleId })))}`);
     } else {
-      console.log('WARNING: No issues found in response!');
-      console.log('Full response for debugging:', responseText);
+      logger.log('WARNING: No issues found in response!');
+      logger.log('Full response for debugging:', responseText);
     }
-    console.log('=== Review request complete ===\n');
+    logger.log('=== Review request complete ===\n');
 
     return {
       issues,
@@ -92,8 +93,8 @@ export async function performReviewIteration(
       iterationNumber
     };
   } catch (error) {
-    console.error('ERROR during review request:', error);
-    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    logger.error('ERROR during review request:', error);
+    logger.error('Error details:', error instanceof Error ? error.message : String(error));
     return {
       issues: [],
       chapterId: chapter.id,
@@ -175,32 +176,32 @@ function parseReviewResponse(responseText: string, chapterId: string, additionLi
   const issues: ReviewIssue[] = [];
 
   try {
-    console.log('[parseReviewResponse] Attempting to parse response...');
+    logger.log('[parseReviewResponse] Attempting to parse response...');
 
     // Try to parse as JSON with code block first
     let jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
     let jsonText = null;
 
     if (jsonMatch) {
-      console.log('[parseReviewResponse] Found JSON code block, parsing...');
+      logger.log('[parseReviewResponse] Found JSON code block, parsing...');
       jsonText = jsonMatch[1];
     } else {
-      console.log('[parseReviewResponse] No JSON code block found, trying raw JSON...');
+      logger.log('[parseReviewResponse] No JSON code block found, trying raw JSON...');
       // Try to parse the entire response as raw JSON
       const trimmed = responseText.trim();
       if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        console.log('[parseReviewResponse] Response looks like raw JSON, attempting to parse...');
+        logger.log('[parseReviewResponse] Response looks like raw JSON, attempting to parse...');
         jsonText = trimmed;
       }
     }
 
     if (jsonText) {
       const json = JSON.parse(jsonText);
-      console.log('[parseReviewResponse] Parsed JSON:', JSON.stringify(json).substring(0, 200));
+      logger.log('[parseReviewResponse] Parsed JSON:', JSON.stringify(json).substring(0, 200));
       if (json.issues && Array.isArray(json.issues)) {
-        console.log(`[parseReviewResponse] Found ${json.issues.length} issues in JSON`);
+        logger.log(`[parseReviewResponse] Found ${json.issues.length} issues in JSON`);
         if (json.issues.length === 0) {
-          console.log('[parseReviewResponse] WARNING: LLM returned empty issues array!');
+          logger.log('[parseReviewResponse] WARNING: LLM returned empty issues array!');
         }
         const parsedIssues = json.issues.map((issue: any) => ({
           ruleId: issue.ruleId || chapterId,
@@ -208,39 +209,60 @@ function parseReviewResponse(responseText: string, chapterId: string, additionLi
           lineNumber: issue.lineNumber || 0,
           codeSnippet: issue.codeSnippet || '',
           reason: issue.reason || '',
-          suggestion: issue.suggestion || ''
+          suggestion: issue.suggestion || '',
+          fixedCodeSnippet: issue.fixedCodeSnippet || ''
         }));
 
         // Filter out issues on deletion lines if this is a diff review
         if (additionLineNumbers) {
           const filtered = parsedIssues.filter((issue: ReviewIssue) => additionLineNumbers.includes(issue.lineNumber));
-          console.log(`[parseReviewResponse] Filtered ${parsedIssues.length - filtered.length} issues on deletion lines`);
+          logger.log(`[parseReviewResponse] Filtered ${parsedIssues.length - filtered.length} issues on deletion lines`);
           return filtered;
         }
         return parsedIssues;
       } else {
-        console.log('[parseReviewResponse] JSON does not contain issues array');
+        logger.log('[parseReviewResponse] JSON does not contain issues array');
       }
     } else {
-      console.log('[parseReviewResponse] Response is not JSON, trying markdown format...');
+      logger.log('[parseReviewResponse] Response is not JSON, trying markdown format...');
     }
 
     // Fallback: Parse markdown format
     const issueBlocks = responseText.split(/(?=^- NG\d+)/m);
-    console.log(`[parseReviewResponse] Found ${issueBlocks.length} markdown blocks`);
+    logger.log(`[parseReviewResponse] Found ${issueBlocks.length} markdown blocks`);
 
     for (const block of issueBlocks) {
       const lineMatch = block.match(/行番号[：:]\s*(\d+)/);
-      const snippetMatch = block.match(/```[\s\S]*?\n([\s\S]*?)\n```/);
       const reasonMatch = block.match(/NG理由[：:]\s*([^\n]+)/);
       const suggestionMatch = block.match(/修正案[：:]\s*([^\n]+)/);
+
+      // Extract all code blocks (first is codeSnippet, second is fixedCodeSnippet)
+      const codeBlockMatches = block.match(/```[\s\S]*?\n([\s\S]*?)\n```/g);
+      let codeSnippet = '';
+      let fixedCodeSnippet = '';
+
+      if (codeBlockMatches && codeBlockMatches.length > 0) {
+        // First code block is the original code snippet
+        const firstMatch = codeBlockMatches[0].match(/```[\s\S]*?\n([\s\S]*?)\n```/);
+        if (firstMatch) {
+          codeSnippet = firstMatch[1].trim();
+        }
+
+        // Second code block (if exists) is the fixed code snippet
+        if (codeBlockMatches.length > 1) {
+          const secondMatch = codeBlockMatches[1].match(/```[\s\S]*?\n([\s\S]*?)\n```/);
+          if (secondMatch) {
+            fixedCodeSnippet = secondMatch[1].trim();
+          }
+        }
+      }
 
       if (lineMatch) {
         const lineNumber = parseInt(lineMatch[1], 10);
 
         // Filter out issues on deletion lines if this is a diff review
         if (additionLineNumbers && !additionLineNumbers.includes(lineNumber)) {
-          console.log(`[parseReviewResponse] Skipping issue on deletion line: ${lineNumber}`);
+          logger.log(`[parseReviewResponse] Skipping issue on deletion line: ${lineNumber}`);
           continue;
         }
 
@@ -248,20 +270,21 @@ function parseReviewResponse(responseText: string, chapterId: string, additionLi
           ruleId: chapterId,
           ruleTitle: '',
           lineNumber: lineNumber,
-          codeSnippet: snippetMatch ? snippetMatch[1].trim() : '',
+          codeSnippet: codeSnippet,
           reason: reasonMatch ? reasonMatch[1].trim() : '',
-          suggestion: suggestionMatch ? suggestionMatch[1].trim() : ''
+          suggestion: suggestionMatch ? suggestionMatch[1].trim() : '',
+          fixedCodeSnippet: fixedCodeSnippet
         });
       }
     }
 
-    console.log(`[parseReviewResponse] Extracted ${issues.length} issues from markdown format`);
+    logger.log(`[parseReviewResponse] Extracted ${issues.length} issues from markdown format`);
   } catch (error) {
-    console.error('[parseReviewResponse] Failed to parse review response:', error);
-    console.error('[parseReviewResponse] Error details:', error instanceof Error ? error.stack : String(error));
+    logger.error('[parseReviewResponse] Failed to parse review response:', error);
+    logger.error('[parseReviewResponse] Error details:', error instanceof Error ? error.stack : String(error));
   }
 
-  console.log(`[parseReviewResponse] Returning ${issues.length} total issues`);
+  logger.log(`[parseReviewResponse] Returning ${issues.length} total issues`);
   return issues;
 }
 

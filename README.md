@@ -49,8 +49,8 @@ Sample configuration files are provided in this repository.
 ### 5. Use in Copilot Chat
 
 ```
-@coding-rule-checker /reviewAll #file
-@coding-rule-checker /reviewDiff main..feature
+@coding-rule-checker /review #file
+@coding-rule-checker /diff main..feature
 ```
 
 ## Project Structure

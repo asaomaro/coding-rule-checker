@@ -96,6 +96,7 @@ export interface ReviewIssue {
   codeSnippet: string;
   reason: string;
   suggestion: string;
+  fixedCodeSnippet?: string;
 }
 
 /**
@@ -158,6 +159,7 @@ export type SourceType = 'local' | 'github';
 export interface ReviewRequest {
   sourceType: SourceType;
   fileOrUrl: string;
+  filesOrUrls: string[];  // Multiple files or URLs
   reviewType: 'all' | 'diff';
   diffRange?: string;
 }

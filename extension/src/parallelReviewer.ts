@@ -44,7 +44,7 @@ export async function reviewCodeParallel(
     progressCallback({
       current: 0,
       total: totalChapters,
-      message: `Processing ${totalChapters} chapters in parallel...`
+      message: `[${rulesetName}] ${code.fileName} - Processing ${totalChapters} chapters in parallel...`
     });
   }
 
@@ -67,7 +67,7 @@ export async function reviewCodeParallel(
       progressCallback({
         current: completedChapters,
         total: totalChapters,
-        message: `Completed ${completedChapters}/${totalChapters} chapters (Chapter ${chapter.id}: ${chapter.title})`
+        message: `[${rulesetName}] ${code.fileName} - Chapter ${chapter.id}: ${chapter.title} (${completedChapters}/${totalChapters})`
       });
     }
 

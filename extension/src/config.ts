@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { minimatch } from 'minimatch';
 import { Settings, RuleSettings } from './types';
+import * as logger from './logger';
 
 /**
  * Loads the main settings configuration
@@ -96,11 +97,11 @@ export function resolveWorkspacePath(workspaceRoot: string, relativePath: string
   // Use character code for backslash to avoid escaping issues
   const backslash = String.fromCharCode(92); // ASCII code for \
 
-  console.log('=== resolveWorkspacePath DEBUG ===');
-  console.log('backslash char code:', backslash.charCodeAt(0));
-  console.log('backslash length:', backslash.length);
-  console.log('workspaceRoot:', workspaceRoot);
-  console.log('relativePath:', relativePath);
+  logger.log('=== resolveWorkspacePath DEBUG ===');
+  logger.log('backslash char code:', backslash.charCodeAt(0));
+  logger.log('backslash length:', backslash.length);
+  logger.log('workspaceRoot:', workspaceRoot);
+  logger.log('relativePath:', relativePath);
 
   // Remove leading ./ or .\ from relative path
   let cleanRelativePath = relativePath;
@@ -111,19 +112,19 @@ export function resolveWorkspacePath(workspaceRoot: string, relativePath: string
   // Normalize slashes to backslashes
   cleanRelativePath = cleanRelativePath.split('/').join(backslash);
 
-  console.log('cleanRelativePath:', cleanRelativePath);
+  logger.log('cleanRelativePath:', cleanRelativePath);
 
   // Ensure workspace root doesn't end with backslash
   let cleanWorkspaceRoot = workspaceRoot.replace(/[\\\/]+$/, '');
 
-  console.log('cleanWorkspaceRoot:', cleanWorkspaceRoot);
+  logger.log('cleanWorkspaceRoot:', cleanWorkspaceRoot);
 
   // Construct full path
   const result = cleanWorkspaceRoot + backslash + cleanRelativePath;
 
-  console.log('result:', result);
-  console.log('result length:', result.length);
-  console.log('===================================');
+  logger.log('result:', result);
+  logger.log('result length:', result.length);
+  logger.log('===================================');
 
   return result;
 }
@@ -157,8 +158,8 @@ export function selectRulesetsForFile(
     relativePath = relativePath.split(path.sep).join('/');
   }
 
-  console.log('[selectRulesetsForFile] File name:', fileName);
-  console.log('[selectRulesetsForFile] Relative path:', relativePath);
+  logger.log('[selectRulesetsForFile] File name:', fileName);
+  logger.log('[selectRulesetsForFile] Relative path:', relativePath);
 
   // Collect all matching patterns with their specificity
   interface PatternMatch {
@@ -176,7 +177,7 @@ export function selectRulesetsForFile(
     if (pattern.startsWith('.')) {
       const extension = path.extname(fileName);
       isMatch = extension === pattern;
-      console.log(`[selectRulesetsForFile] Extension check: ${pattern} vs ${extension} = ${isMatch}`);
+      logger.log(`[selectRulesetsForFile] Extension check: ${pattern} vs ${extension} = ${isMatch}`);
     }
     // Glob pattern matching
     else {
@@ -184,14 +185,14 @@ export function selectRulesetsForFile(
       const matchFileName = minimatch(fileName, pattern);
       const matchRelativePath = minimatch(relativePath, pattern);
       isMatch = matchFileName || matchRelativePath;
-      console.log(`[selectRulesetsForFile] Pattern check: ${pattern} vs ${fileName}/${relativePath} = ${isMatch}`);
+      logger.log(`[selectRulesetsForFile] Pattern check: ${pattern} vs ${fileName}/${relativePath} = ${isMatch}`);
     }
 
     if (isMatch) {
       // Calculate specificity: longer patterns and more path segments = higher specificity
       const specificity = pattern.length + (pattern.split('/').length * 10);
       matches.push({ pattern, rulesets, specificity });
-      console.log(`[selectRulesetsForFile] Matched pattern: ${pattern} (specificity: ${specificity})`);
+      logger.log(`[selectRulesetsForFile] Matched pattern: ${pattern} (specificity: ${specificity})`);
     }
   }
 
@@ -211,7 +212,7 @@ export function selectRulesetsForFile(
     }
   }
 
-  console.log('[selectRulesetsForFile] Selected rulesets:', result);
+  logger.log('[selectRulesetsForFile] Selected rulesets:', result);
   return result;
 }
 
@@ -235,7 +236,7 @@ export function selectChaptersForFile(
 ): string[] | null {
   // If no chapter filters configured, review all chapters
   if (!ruleSettings.chapterFilters) {
-    console.log('[selectChaptersForFile] No chapter filters configured, reviewing all chapters');
+    logger.log('[selectChaptersForFile] No chapter filters configured, reviewing all chapters');
     return null;
   }
 
@@ -247,8 +248,8 @@ export function selectChaptersForFile(
     relativePath = relativePath.split(path.sep).join('/');
   }
 
-  console.log('[selectChaptersForFile] File name:', fileName);
-  console.log('[selectChaptersForFile] Relative path:', relativePath);
+  logger.log('[selectChaptersForFile] File name:', fileName);
+  logger.log('[selectChaptersForFile] Relative path:', relativePath);
 
   const patterns = ruleSettings.chapterFilters.patterns || {};
 
@@ -258,18 +259,18 @@ export function selectChaptersForFile(
     const matchRelativePath = minimatch(relativePath, pattern);
 
     if (matchFileName || matchRelativePath) {
-      console.log(`[selectChaptersForFile] Matched pattern: ${pattern}, chapters: ${chapterIds.join(', ')}`);
+      logger.log(`[selectChaptersForFile] Matched pattern: ${pattern}, chapters: ${chapterIds.join(', ')}`);
       return chapterIds;
     }
   }
 
   // If no pattern matched, use default if specified
   if (ruleSettings.chapterFilters.default) {
-    console.log('[selectChaptersForFile] Using default chapter filter:', ruleSettings.chapterFilters.default);
+    logger.log('[selectChaptersForFile] Using default chapter filter:', ruleSettings.chapterFilters.default);
     return ruleSettings.chapterFilters.default;
   }
 
   // No filters matched and no default specified, review all chapters
-  console.log('[selectChaptersForFile] No pattern matched and no default, reviewing all chapters');
+  logger.log('[selectChaptersForFile] No pattern matched and no default, reviewing all chapters');
   return null;
 }

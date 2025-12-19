@@ -109,25 +109,25 @@ Functions should be small and focused on a single responsibility.
 ### Review a specific file
 
 ```
-@coding-rule-checker /reviewAll #file
+@coding-rule-checker /review #file
 ```
 
 ### Review git diff
 
 ```
-@coding-rule-checker /reviewDiff main..feature #file
+@coding-rule-checker /diff main..feature #file
 ```
 
 ### Review all changed files
 
 ```
-@coding-rule-checker /reviewDiff
+@coding-rule-checker /diff
 ```
 
 ### Review GitHub repository
 
 ```
-@coding-rule-checker /reviewDiff https://github.com/owner/repo main..feature
+@coding-rule-checker /diff https://github.com/owner/repo main..feature
 ```
 
 ## How It Works

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { CodeToReview, DiffInfo, DiffLine, SourceType } from './types';
+import * as logger from './logger';
 
 const execAsync = promisify(exec);
 
@@ -217,9 +218,9 @@ export async function getGitHubDiff(url: string, diffRange: string): Promise<Cod
 
   // Use gh CLI to get diff
   const command = `gh api repos/${owner}/${repo}/compare/${processedDiffRange}`;
-  console.log('[getGitHubDiff] Executing command:', command);
-  console.log('[getGitHubDiff] Original diff range:', diffRange);
-  console.log('[getGitHubDiff] Processed diff range:', processedDiffRange);
+  logger.log('[getGitHubDiff] Executing command:', command);
+  logger.log('[getGitHubDiff] Original diff range:', diffRange);
+  logger.log('[getGitHubDiff] Processed diff range:', processedDiffRange);
 
   const { stdout } = await execAsync(command);
 
@@ -264,9 +265,9 @@ export async function getGitHubCompareDiff(url: string, compareRange: string, ta
 
   // Use gh CLI to get compare diff
   const command = `gh api repos/${owner}/${repo}/compare/${processedCompareRange}`;
-  console.log('[getGitHubCompareDiff] Executing command:', command);
-  console.log('[getGitHubCompareDiff] Original compare range:', compareRange);
-  console.log('[getGitHubCompareDiff] Processed compare range:', processedCompareRange);
+  logger.log('[getGitHubCompareDiff] Executing command:', command);
+  logger.log('[getGitHubCompareDiff] Original compare range:', compareRange);
+  logger.log('[getGitHubCompareDiff] Processed compare range:', processedCompareRange);
 
   const { stdout } = await execAsync(command);
 

@@ -47,7 +47,7 @@ run-lint.bat
 ### Testing the Extension
 1. Open project in VSCode
 2. Press `F5` to launch Extension Development Host
-3. In the new window, use: `@coding-rule-checker /reviewAll #file`
+3. In the new window, use: `@coding-rule-checker /review #file`
 
 ## Architecture
 
@@ -93,8 +93,8 @@ run-lint.bat
 ### Review Request Types
 
 **Commands:**
-- `/reviewAll #file` - Review entire file content
-- `/reviewDiff [range] #file` - Review only git diff
+- `/review #file` - Review entire file content
+- `/diff [range] #file` - Review only git diff
   - Range examples: `main..feature`, `abc123..def456`
   - Without file: reviews all changed files in workspace
   - Without range: reviews uncommitted changes

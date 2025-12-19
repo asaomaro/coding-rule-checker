@@ -17,9 +17,37 @@ function extractTemplateSection(template: string, startMarker: string, endMarker
 }
 
 /**
+ * Replaces a placeholder with indentation-aware multi-line text
+ */
+function replaceWithIndent(text: string, placeholder: string, replacement: string): string {
+  // Handle empty replacement
+  if (!replacement) {
+    return text.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), '');
+  }
+
+  // Find all occurrences of the placeholder and preserve indentation
+  const regex = new RegExp(`^([ \\t]*)${placeholder.replace(/[{}]/g, '\\$&')}`, 'gm');
+
+  return text.replace(regex, (match, indent) => {
+    // Split replacement into lines and add indent to each line
+    const lines = replacement.split('\n');
+    return lines.map(line => line ? indent + line : line).join('\n');
+  });
+}
+
+/**
+ * Converts a file path to a clickable Markdown link
+ */
+function filePathToLink(filePath: string, fileName: string): string {
+  // Use file:// protocol for absolute paths
+  const fileUri = filePath.startsWith('http') ? filePath : `file:///${filePath.replace(/\\/g, '/')}`;
+  return `[${fileName}](${fileUri})`;
+}
+
+/**
  * Formats unified review results using a template
  */
-export function formatUnifiedReviewResults(results: ReviewResult[], template: string): string {
+export function formatUnifiedReviewResults(results: ReviewResult[], template: string, showChaptersWithNoIssues: boolean = false): string {
   if (results.length === 0) {
     return template;
   }
@@ -27,8 +55,8 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
   const firstResult = results[0];
   let output = template;
 
-  // Replace file-level placeholders
-  output = output.replace(/{fileName}/g, firstResult.fileName);
+  // Replace file-level placeholders with clickable links
+  output = output.replace(/{fileName}/g, filePathToLink(firstResult.filePath, firstResult.fileName));
   output = output.replace(/{filePath}/g, firstResult.filePath);
   output = output.replace(/{diffDetails}/g, firstResult.diffDetails || '');
 
@@ -47,6 +75,12 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
     rulesetTemplate,
     '<!-- CHAPTER_SECTION_START -->',
     '<!-- CHAPTER_SECTION_END -->'
+  );
+
+  const noIssuesChapterTemplate = extractTemplateSection(
+    rulesetTemplate,
+    '<!-- NO_ISSUES_CHAPTER_SECTION_START -->',
+    '<!-- NO_ISSUES_CHAPTER_SECTION_END -->'
   );
 
   const issueTemplate = extractTemplateSection(
@@ -70,45 +104,62 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
     let chapterSections = '';
 
     for (const chapter of result.chapterResults) {
-      if (chapter.issues.length === 0) continue;
+      if (!showChaptersWithNoIssues && chapter.issues.length === 0) continue;
 
-      let currentChapterSection = chapterTemplate;
+      // Use different template based on whether there are issues
+      if (chapter.issues.length === 0) {
+        // No issues - use the NO_ISSUES template
+        let currentChapterSection = noIssuesChapterTemplate;
+        currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
+        currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+        chapterSections += currentChapterSection + '\n';
+      } else {
+        // Has issues - use the regular template
+        let currentChapterSection = chapterTemplate;
 
-      // Replace chapter-level placeholders
-      currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
-      currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+        // Replace chapter-level placeholders
+        currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
+        currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
 
-      // Build issue sections
-      let issueSections = '';
+        // Build issue sections
+        let issueSections = '';
 
-      for (let i = 0; i < chapter.issues.length; i++) {
-        const issue = chapter.issues[i];
-        let currentIssueSection = issueTemplate;
+        for (let i = 0; i < chapter.issues.length; i++) {
+          const issue = chapter.issues[i];
+          let currentIssueSection = issueTemplate;
 
-        // Replace issue-level placeholders
-        currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
-        currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
-        currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
-        currentIssueSection = currentIssueSection.replace(/{codeSnippet}/g, issue.codeSnippet);
-        currentIssueSection = currentIssueSection.replace(/{reason}/g, issue.reason);
-        currentIssueSection = currentIssueSection.replace(/{suggestion}/g, issue.suggestion);
+          // Replace issue-level placeholders with indentation awareness for multi-line values
+          currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
+          currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
+          currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
+          currentIssueSection = replaceWithIndent(currentIssueSection, '{codeSnippet}', issue.codeSnippet);
+          currentIssueSection = replaceWithIndent(currentIssueSection, '{reason}', issue.reason);
+          currentIssueSection = replaceWithIndent(currentIssueSection, '{suggestion}', issue.suggestion);
+          currentIssueSection = replaceWithIndent(currentIssueSection, '{fixedCodeSnippet}', issue.fixedCodeSnippet || '');
 
-        issueSections += currentIssueSection + '\n';
+          issueSections += currentIssueSection + '\n';
+        }
+
+        // Replace issue sections in chapter template
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- ISSUE_START -->[\s\S]*?<!-- ISSUE_END -->/,
+          issueSections.trim()
+        );
+
+        chapterSections += currentChapterSection + '\n';
       }
-
-      // Replace issue sections in chapter template
-      currentChapterSection = currentChapterSection.replace(
-        /<!-- ISSUE_START -->[\s\S]*?<!-- ISSUE_END -->/,
-        issueSections.trim()
-      );
-
-      chapterSections += currentChapterSection + '\n';
     }
 
     // Replace chapter sections in ruleset template
     currentRulesetSection = currentRulesetSection.replace(
       /<!-- CHAPTER_SECTION_START -->[\s\S]*?<!-- CHAPTER_SECTION_END -->/,
       chapterSections.trim()
+    );
+
+    // Remove NO_ISSUES_CHAPTER_SECTION template (already processed above)
+    currentRulesetSection = currentRulesetSection.replace(
+      /<!-- NO_ISSUES_CHAPTER_SECTION_START -->[\s\S]*?<!-- NO_ISSUES_CHAPTER_SECTION_END -->/g,
+      ''
     );
 
     rulesetSections += currentRulesetSection + '\n';
@@ -163,7 +214,7 @@ export async function saveUnifiedReviewResults(
 /**
  * Formats review result for chat display
  */
-export function formatForChat(result: ReviewResult): string {
+export function formatForChat(result: ReviewResult, showChaptersWithNoIssues: boolean = false): string {
   let output = `**Review completed for ${result.fileName}**\n\n`;
 
   if (result.totalIssues === 0) {
@@ -174,7 +225,7 @@ export function formatForChat(result: ReviewResult): string {
   output += `Found ${result.totalIssues} issue(s):\n\n`;
 
   for (const chapter of result.chapterResults) {
-    if (chapter.issues.length === 0) {
+    if (!showChaptersWithNoIssues && chapter.issues.length === 0) {
       continue;
     }
 

@@ -17,11 +17,11 @@ Codign Rule Checkerは、マークダウン形式で記述されたコーディ�
     - GitHubリポジトリ上の指定ファイル
     - GitHubリポジトリ上の差分
 - 対象がローカルかGitHubかは、ファイル指定の形式で自動判定
-    - GitHubの場合、@codinf-rule-checker /reviewDiff https://github.com/xxxx のようにURLを指定
+    - GitHubの場合、@codinf-rule-checker /diff https://github.com/xxxx のようにURLを指定
 - GitHubリポジトリからのコード取得は、gh CLIを使用
 - Copilotチャットに@codinf-rule-checkerと指示を送ることで、解析を開始
-    - @codinf-rule-checker /reviewALL #file で指定ファイルの全コードを解析
-    - @codinf-rule-checker /reviewDiff main..future #file で差分コードのみ解析。ファイル指定がなければすべてのファイルの差分を解析
+    - @codinf-rule-checker /review #file で指定ファイルの全コードを解析
+    - @codinf-rule-checker /diff main..future #file で差分コードのみ解析。ファイル指定がなければすべてのファイルの差分を解析
         - 差分範囲は、Gitの差分指定形式に準拠
         - 差分指定がない場合は、ローカルの未コミット分の差分を解析
         - GitHubの場合、commit、pull request、branch名での差分指定が可能

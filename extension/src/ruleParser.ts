@@ -1,46 +1,47 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { RuleChapter, Rule } from './types';
+import * as logger from './logger';
 
 /**
  * Loads all rule files from a directory and parses them into chapters
  */
 export async function loadRules(rulesPath: string): Promise<RuleChapter[]> {
-  console.log('loadRules: rulesPath =', rulesPath);
+  logger.log('loadRules: rulesPath =', rulesPath);
 
   const files = await fs.readdir(rulesPath);
-  console.log('loadRules: found files =', files);
+  logger.log('loadRules: found files =', files);
 
   const markdownFiles = files.filter(file => file.endsWith('.md')).sort();
-  console.log('loadRules: markdown files =', markdownFiles);
+  logger.log('loadRules: markdown files =', markdownFiles);
 
   const allChapters: RuleChapter[] = [];
 
   for (const file of markdownFiles) {
     const backslash = String.fromCharCode(92);
     const filePath = rulesPath + backslash + file;
-    console.log('loadRules: reading file =', filePath);
+    logger.log('loadRules: reading file =', filePath);
 
     const content = await fs.readFile(filePath, 'utf-8');
-    console.log('loadRules: file content length =', content.length);
+    logger.log('loadRules: file content length =', content.length);
 
     // Debug: show first 200 chars
-    console.log('loadRules: first 200 chars:', content.substring(0, 200));
+    logger.log('loadRules: first 200 chars:', content.substring(0, 200));
 
     const chapters = parseRuleMarkdown(content);
-    console.log('loadRules: parsed chapters from', file, '=', chapters.length);
+    logger.log('loadRules: parsed chapters from', file, '=', chapters.length);
 
     if (chapters.length === 0) {
       // Debug parsing
       const lines = content.split('\n');
-      console.log('loadRules: total lines =', lines.length);
-      console.log('loadRules: first 3 lines:', lines.slice(0, 3));
+      logger.log('loadRules: total lines =', lines.length);
+      logger.log('loadRules: first 3 lines:', lines.slice(0, 3));
     }
 
     allChapters.push(...chapters);
   }
 
-  console.log('loadRules: total chapters =', allChapters.length);
+  logger.log('loadRules: total chapters =', allChapters.length);
   return allChapters;
 }
 

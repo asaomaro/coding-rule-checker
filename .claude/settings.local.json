@@ -12,7 +12,8 @@
       "Bash(git commit:*)",
       "WebSearch",
       "Bash(gh api:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
