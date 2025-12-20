@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Coding Rule Checker is a VSCode extension that performs static code analysis based on coding rules written in Markdown format. It integrates with GitHub Copilot Chat to review code against custom rules defined by users.
 
+**Key Features:**
+- **Multiple Ruleset Support**: Apply different rulesets to different file types using pattern matching
+- **Parallel Processing**: Files, rulesets, chapters, and iterations are all parallelized
+- **Duplicate Removal**: Automatically deduplicates issues with same ruleId + lineNumber
+- **Threshold-based Filtering**: Configurable threshold to reduce false positives
+- **Flexible Output**: Supports both hierarchical and table output formats
+- **Chapter Filtering**: Review specific chapters only for matching file patterns
+- **GitHub Integration**: Review code from local files, git diffs, or GitHub repositories
+
 ## Development Commands
 
 ### Initial Setup
@@ -80,8 +89,13 @@ run-lint.bat
 **Iteration System:**
 - Each chapter is reviewed N times (configurable via `reviewIterations`)
 - Multiple iterations improve review accuracy
-- Results from all iterations are aggregated
-- False positive checks filter out incorrect detections
+- Results from all iterations are aggregated using a configurable threshold
+- **Duplicate Removal**: Issues with the same `ruleId` and `lineNumber` are automatically deduplicated
+- **Threshold-based Filtering**: `issueDetectionThreshold` setting controls how many iterations must detect an issue:
+  - `0.0`: Issue must appear in ALL iterations (strictest)
+  - `0.5`: Issue must appear in majority of iterations (default)
+  - `1.0`: Issue must appear at least ONCE (most lenient)
+- False positive checks further filter out incorrect detections
 
 **Configuration Hierarchy:**
 ```
@@ -133,10 +147,11 @@ All types defined in `types.ts`:
 
 ### Data Flow for Review
 
-1. Parse request → determine source (local/GitHub) and type (all/diff)
-2. Load settings → get ruleset name from `settings.ruleset`
-3. For the ruleset:
-   - Load rule-settings.json
+1. **Parse request** → determine source (local/GitHub) and type (all/diff)
+2. **Load settings** → get ruleset configuration from `settings.ruleset` (single or multiple rulesets)
+3. **Select rulesets for files** → match file patterns to determine which rulesets apply to each file
+4. **For each file × ruleset combination** (all combinations processed in parallel):
+   - Load rule-settings.json for the ruleset
    - Parse all Markdown files in rules/
    - **Filter chapters** (two-level filtering):
      - Level 1: Chapter-to-file-pattern filter (`chapterFilePatterns` in rule-settings.json)
@@ -145,12 +160,22 @@ All types defined in `types.ts`:
          - If chapter ID **in chapterFilePatterns**: Review only if file matches patterns
      - Level 2: Additional file pattern-based filter (`chapterFilters` in rule-settings.json)
        - Optional: Further filters chapters based on file path patterns
-   - For each filtered chapter in parallel:
-     - Run N review iterations in parallel
-     - Aggregate iteration results
-     - Run M false-positive checks in parallel
-     - Filter out false positives
-4. Format output for chat and optionally save to file
+   - **For each filtered chapter in parallel**:
+     - Run N review iterations in parallel (N = `reviewIterations` for this chapter)
+     - **Aggregate iteration results**:
+       - Deduplicate issues by `ruleId` + `lineNumber`
+       - Apply `issueDetectionThreshold` to filter issues:
+         - Count how many iterations detected each issue
+         - Calculate required count based on threshold
+         - Keep only issues meeting the threshold
+     - Run M false-positive checks in parallel (M = `falsePositiveCheckIterations`)
+     - Filter out false positives based on majority vote
+5. **Group issues by rule** → create hierarchical structure (chapter → rule → issues)
+6. **Format output**:
+   - Apply `outputFormat` setting ("normal" or "table")
+   - Apply `showRulesWithNoIssues` setting
+   - Display in Copilot Chat
+   - Optionally save to file (if `fileOutput.enabled` is true)
 
 ## Rule File Format
 
