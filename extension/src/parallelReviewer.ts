@@ -30,6 +30,7 @@ export async function reviewCodeParallel(
   ruleSettings: RuleSettings,
   rulesetName: string,
   systemPrompt: string,
+  commonPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
@@ -55,6 +56,7 @@ export async function reviewCodeParallel(
       chapter,
       ruleSettings,
       systemPrompt,
+      commonPrompt,
       reviewPromptTemplate,
       falsePositivePromptTemplate,
       model,
@@ -100,6 +102,7 @@ async function reviewChapter(
   chapter: RuleChapter,
   ruleSettings: RuleSettings,
   systemPrompt: string,
+  commonPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
@@ -120,6 +123,7 @@ async function reviewChapter(
         code,
         chapter,
         systemPrompt,
+        commonPrompt,
         reviewPromptTemplate,
         i,
         model,
@@ -144,7 +148,7 @@ async function reviewChapter(
       const checkPromises: Promise<FalsePositiveCheck>[] = [];
       for (let i = 0; i < falsePositiveIterations; i++) {
         checkPromises.push(
-          checkFalsePositive(code, issue, chapter, falsePositivePromptTemplate, model).then(
+          checkFalsePositive(code, issue, chapter, systemPrompt, falsePositivePromptTemplate, model).then(
             (check) => ({ ...check, issueIndex })
           )
         );
@@ -174,6 +178,7 @@ export async function reviewMultipleFiles(
   ruleSettings: RuleSettings,
   rulesetName: string,
   systemPrompt: string,
+  commonPrompt: string,
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
@@ -192,6 +197,7 @@ export async function reviewMultipleFiles(
         ruleSettings,
         rulesetName,
         systemPrompt,
+        commonPrompt,
         reviewPromptTemplate,
         falsePositivePromptTemplate,
         model,

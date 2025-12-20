@@ -64,14 +64,30 @@ async function handleChatRequest(
   const command = request.command;
 
   if (!command) {
-    stream.markdown('Please use one of the following commands:\n');
-    stream.markdown('- `/review #file` - Review all code in the specified file\n');
-    stream.markdown('- `/diff [range] #file` - Review diff code (optionally specify diff range)\n');
+    stream.markdown('Please use one of the following commands:\n\n');
+
+    stream.markdown('**Basic Usage:**\n');
+    stream.markdown('- `/review #file` - Review file (select with VSCode reference)\n');
+    stream.markdown('- `/review #folder` - Review all files in folder\n');
+    stream.markdown('- `/diff main..feature` - Review diff between branches\n\n');
+
+    stream.markdown('**Multiple Files:**\n');
+    stream.markdown('- `/review #file1 #file2 #file3` - Review multiple files\n');
+    stream.markdown('- `/review #file:UserService.java #file:Controller.java` - By name\n\n');
+
+    stream.markdown('**Ruleset Override:**\n');
+    stream.markdown('- `/review --ruleset=typescript-rules #file` - Use specific ruleset\n');
+    stream.markdown('- `/review -r typescript-rules,security-rules #file` - Multiple rulesets\n\n');
+
+    stream.markdown('**GitHub:**\n');
+    stream.markdown('- `/review https://github.com/owner/repo/blob/main/file.ts` - GitHub file\n');
+    stream.markdown('- `/diff https://github.com/owner/repo/compare/main...feature` - GitHub diff\n');
+
     return;
   }
 
   // Parse request first
-  const reviewRequest = parseReviewRequest(request, command);
+  const reviewRequest = await parseReviewRequest(request, command);
 
   // Get workspace root
   stream.markdown('📋 Loading settings...\n');
@@ -122,22 +138,33 @@ async function handleChatRequest(
   for (const code of codesToReview) {
     stream.markdown(`\n🔍 Reviewing ${code.fileName}...\n`);
 
-    // Determine which rulesets to apply based on file pattern matching
-    const rulesetNames = selectRulesetsForFile(
-      code.filePath,
-      code.fileName,
-      settings,
-      workspaceRoot
-    );
+    // Determine which rulesets to apply
+    let rulesetNames: string[];
 
-    stream.markdown(`📝 File: ${code.fileName}\n`);
+    if (reviewRequest.rulesetOverride) {
+      // Use override rulesets from --ruleset flag
+      rulesetNames = reviewRequest.rulesetOverride;
+      stream.markdown(`📝 File: ${code.fileName}\n`);
+      stream.markdown(`📚 Using specified rulesets: ${rulesetNames.join(', ')}\n`);
+      logger.log('[Review] Using ruleset override:', rulesetNames);
+    } else {
+      // Auto-select rulesets based on file pattern matching
+      rulesetNames = selectRulesetsForFile(
+        code.filePath,
+        code.fileName,
+        settings,
+        workspaceRoot
+      );
 
-    if (rulesetNames.length === 0) {
-      stream.markdown(`⚠️ No rulesets configured for this file\n`);
-      continue;
+      stream.markdown(`📝 File: ${code.fileName}\n`);
+
+      if (rulesetNames.length === 0) {
+        stream.markdown(`⚠️ No rulesets configured for this file\n`);
+        continue;
+      }
+
+      stream.markdown(`📚 Applying rulesets: ${rulesetNames.join(', ')}\n`);
     }
-
-    stream.markdown(`📚 Applying rulesets: ${rulesetNames.join(', ')}\n`);
 
     // Accumulate results from all rulesets
     const allResults = [];
@@ -152,7 +179,16 @@ async function handleChatRequest(
       // Load rules
       const rulesPath = resolveWorkspacePath(workspaceRoot, ruleSettings.rulesPath);
 
-      const allChapters = await loadRules(rulesPath);
+      // Load common prompt if specified
+      let commonPromptPath: string | undefined;
+      let commonPrompt = '';
+      if (ruleSettings.commonPromptPath) {
+        commonPromptPath = resolveWorkspacePath(workspaceRoot, ruleSettings.commonPromptPath);
+        commonPrompt = await loadPromptTemplate(workspaceRoot, ruleSettings.commonPromptPath);
+        stream.markdown(`📄 Loaded common prompt from: ${ruleSettings.commonPromptPath}\n`);
+      }
+
+      const allChapters = await loadRules(rulesPath, commonPromptPath);
 
       stream.markdown(`📚 Loaded ${allChapters.length} chapters from: ${rulesPath}\n`);
 
@@ -195,6 +231,7 @@ async function handleChatRequest(
         ruleSettings,
         rulesetName,
         systemPrompt,
+        commonPrompt,
         reviewPrompt,
         falsePositivePrompt,
         model,
@@ -253,18 +290,62 @@ async function handleChatRequest(
   stream.markdown('\n\n✅ Review completed!\n');
 }
 
-function parseReviewRequest(request: vscode.ChatRequest, command: string): ReviewRequest {
+/**
+ * Detects and warns about ambiguous arguments in the prompt
+ */
+function detectAmbiguousArguments(text: string, logger: any): void {
+  // Remove all known patterns from the text
+  let cleanedText = text;
+
+  // Remove known patterns
+  cleanedText = cleanedText.replace(/#file:[^\s]+/g, '');           // #file:xxx
+  cleanedText = cleanedText.replace(/#folder:[^\s]+/g, '');         // #folder:xxx
+  cleanedText = cleanedText.replace(/--ruleset=[^\s]+/g, '');       // --ruleset=xxx
+  cleanedText = cleanedText.replace(/-r\s+[^\s]+/g, '');            // -r xxx
+  cleanedText = cleanedText.replace(/https?:\/\/[^\s]+/g, '');      // URLs
+  cleanedText = cleanedText.replace(/[\w.\/~^@{}\-]+\.\.+[\w.\/~^@{}\-]+/g, ''); // diff range (xxx..yyy)
+  cleanedText = cleanedText.replace(/[A-Za-z]:[\\\/][\w\\\/.-]+\.\w+/g, ''); // Absolute paths (Windows)
+  cleanedText = cleanedText.replace(/\/[\w\/.-]+\.\w+/g, '');       // Absolute paths (Unix)
+  cleanedText = cleanedText.replace(/\.\.?\/[\w\/.-]+\.\w+/g, ''); // Relative paths (./ or ../)
+
+  // Get remaining tokens (potential ambiguous arguments)
+  const tokens = cleanedText.split(/\s+/).filter(t => t.length > 0);
+
+  if (tokens.length > 0) {
+    logger.log('[parseReviewRequest] ⚠️ WARNING: Potentially ambiguous argument(s):', tokens);
+    logger.log('[parseReviewRequest] Suggestion: Use explicit formats:');
+    logger.log('[parseReviewRequest]   - Files: #file:filename or #file (VSCode reference)');
+    logger.log('[parseReviewRequest]   - Folders: #folder:foldername or #folder (VSCode reference)');
+    logger.log('[parseReviewRequest]   - Rulesets: --ruleset=name or -r name');
+    logger.log('[parseReviewRequest]   - Diff range: branch..branch (with ..)');
+  }
+}
+
+async function parseReviewRequest(request: vscode.ChatRequest, command: string): Promise<ReviewRequest> {
   const text = request.prompt;
   const parts = text.split(/\s+/);
 
   let fileOrUrl = '';
   let filesOrUrls: string[] = [];
   let diffRange: string | undefined;
+  let rulesetOverride: string[] | undefined;
 
   logger.log('[parseReviewRequest] Parsing request...');
   logger.log('[parseReviewRequest] Prompt text:', text);
   logger.log('[parseReviewRequest] Command:', command);
   logger.log('[parseReviewRequest] References count:', request.references.length);
+
+  // Parse --ruleset flag (both --ruleset=xxx and -r xxx formats)
+  const rulesetLongMatch = text.match(/--ruleset=([^\s]+)/);
+  const rulesetShortMatch = text.match(/-r\s+([^\s]+)/);
+
+  if (rulesetLongMatch) {
+    rulesetOverride = rulesetLongMatch[1].split(',').map(r => r.trim());
+    logger.log('[parseReviewRequest] Ruleset override (--ruleset):', rulesetOverride);
+  } else if (rulesetShortMatch) {
+    rulesetOverride = rulesetShortMatch[1].split(',').map(r => r.trim());
+    logger.log('[parseReviewRequest] Ruleset override (-r):', rulesetOverride);
+  }
 
   // Priority 1: Check for GitHub URL(s) in prompt text (highest priority)
   const urlMatches = text.matchAll(/(https?:\/\/github\.com\/[^\s]+)/g);
@@ -330,27 +411,163 @@ function parseReviewRequest(request: vscode.ChatRequest, command: string): Revie
     }
   }
 
-  // Priority 2: Extract file references (support multiple files)
+  // Priority 2: Parse #file:filename and #folder:foldername patterns from prompt text
   if (!fileOrUrl) {
-    for (const ref of request.references) {
-      logger.log('[parseReviewRequest] Processing reference:', ref);
-      if (ref.value && typeof ref.value === 'object' && 'uri' in ref.value) {
-        const filePath = (ref.value as any).uri.fsPath;
-        filesOrUrls.push(filePath);
-        logger.log('[parseReviewRequest] Found file reference:', filePath);
-      }
-    }
+    // Extract #file:filename patterns from the prompt
+    const filePatternMatches = text.matchAll(/#file:([^\s]+)/g);
+    const filePatterns = Array.from(filePatternMatches, m => m[1]);
 
-    // Set first file as primary fileOrUrl for backward compatibility
-    if (filesOrUrls.length > 0) {
-      fileOrUrl = filesOrUrls[0];
-      logger.log('[parseReviewRequest] Primary file:', fileOrUrl);
-      logger.log('[parseReviewRequest] Total files:', filesOrUrls.length);
+    // Extract #folder:foldername patterns from the prompt
+    const folderPatternMatches = text.matchAll(/#folder:([^\s]+)/g);
+    const folderPatterns = Array.from(folderPatternMatches, m => m[1]);
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+      if (filePatterns.length > 0 || folderPatterns.length > 0) {
+        logger.log('[parseReviewRequest] ERROR: No workspace folder open');
+      }
+    } else {
+      // Process file patterns
+      if (filePatterns.length > 0) {
+        logger.log('[parseReviewRequest] Found', filePatterns.length, '#file: pattern(s)');
+
+        for (const pattern of filePatterns) {
+          logger.log('[parseReviewRequest] Searching for file:', pattern);
+
+          // Try to find the file in workspace
+          const files = await vscode.workspace.findFiles(`**/${pattern}`, '**/node_modules/**', 10);
+
+          if (files.length > 0) {
+            const filePath = files[0].fsPath;
+            filesOrUrls.push(filePath);
+            logger.log('[parseReviewRequest] ✓ Found file:', filePath);
+
+            if (files.length > 1) {
+              logger.log('[parseReviewRequest] WARNING: Multiple files found, using first one');
+              files.forEach((f, i) => logger.log(`  [${i + 1}]`, f.fsPath));
+            }
+          } else {
+            logger.log('[parseReviewRequest] ✗ File not found:', pattern);
+          }
+        }
+      }
+
+      // Process folder patterns
+      if (folderPatterns.length > 0) {
+        logger.log('[parseReviewRequest] Found', folderPatterns.length, '#folder: pattern(s)');
+
+        for (const pattern of folderPatterns) {
+          logger.log('[parseReviewRequest] Searching for folder:', pattern);
+
+          // Try to find the folder in workspace
+          const folders = await vscode.workspace.findFiles(`**/${pattern}`, '**/node_modules/**', 10);
+
+          // Filter to only directories
+          for (const folder of folders) {
+            try {
+              const stat = await vscode.workspace.fs.stat(folder);
+              if (stat.type === vscode.FileType.Directory) {
+                const folderPath = folder.fsPath;
+                filesOrUrls.push(folderPath);
+                logger.log('[parseReviewRequest] ✓ Found folder:', folderPath);
+                break; // Use first matching folder
+              }
+            } catch (error) {
+              // Not a directory or can't stat, continue
+            }
+          }
+
+          // If no folder found by pattern, try direct path
+          if (folders.length === 0) {
+            // Try as direct relative path from workspace root
+            const directPath = path.join(workspaceFolders[0].uri.fsPath, pattern);
+            try {
+              const stat = await vscode.workspace.fs.stat(vscode.Uri.file(directPath));
+              if (stat.type === vscode.FileType.Directory) {
+                filesOrUrls.push(directPath);
+                logger.log('[parseReviewRequest] ✓ Found folder (direct path):', directPath);
+              } else {
+                logger.log('[parseReviewRequest] ✗ Folder not found:', pattern);
+              }
+            } catch (error) {
+              logger.log('[parseReviewRequest] ✗ Folder not found:', pattern);
+            }
+          }
+        }
+      }
     }
   }
 
-  // Priority 3: Fall back to active editor (lowest priority)
-  if (!fileOrUrl && vscode.window.activeTextEditor) {
+  // Priority 3: Parse absolute paths and explicit relative paths (exception handling)
+  if (!fileOrUrl && filesOrUrls.length === 0) {
+    logger.log('[parseReviewRequest] Checking for explicit path formats...');
+
+    // Match absolute paths or explicit relative paths with extensions
+    // Windows: C:\path\file.ts or /path/file.ts
+    // Relative: ./path/file.ts or ../path/file.ts
+    const pathPattern = /(?:^|[\s])([A-Za-z]:[\\\/][\w\\\/.-]+\.\w+|\/[\w\/.-]+\.\w+|\.\.?\/[\w\/.-]+\.\w+)(?=\s|$)/g;
+    const pathMatches = text.matchAll(pathPattern);
+
+    for (const match of pathMatches) {
+      const pathStr = match[1];
+      logger.log('[parseReviewRequest] Found explicit path:', pathStr);
+
+      // Resolve relative paths
+      let resolvedPath = pathStr;
+      if (pathStr.startsWith('./') || pathStr.startsWith('../')) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+          resolvedPath = path.resolve(workspaceFolders[0].uri.fsPath, pathStr);
+        }
+      }
+
+      // Verify file exists
+      try {
+        const stat = await vscode.workspace.fs.stat(vscode.Uri.file(resolvedPath));
+        if (stat.type === vscode.FileType.File || stat.type === vscode.FileType.Directory) {
+          filesOrUrls.push(resolvedPath);
+          logger.log('[parseReviewRequest] ✓ Found path:', resolvedPath);
+        }
+      } catch (error) {
+        logger.log('[parseReviewRequest] ✗ Path not found:', resolvedPath);
+      }
+    }
+  }
+
+  // Priority 4: Extract file references from VSCode API (support multiple files)
+  if (!fileOrUrl && filesOrUrls.length === 0) {
+    logger.log('[parseReviewRequest] Extracting file references from VSCode API...');
+    logger.log('[parseReviewRequest] Total references:', request.references.length);
+
+    for (let i = 0; i < request.references.length; i++) {
+      const ref = request.references[i];
+      logger.log(`[parseReviewRequest] Reference ${i + 1}:`, {
+        id: ref.id,
+        name: (ref.value as any)?.name,
+        uri: (ref.value as any)?.uri?.fsPath
+      });
+
+      if (ref.value && typeof ref.value === 'object' && 'uri' in ref.value) {
+        const filePath = (ref.value as any).uri.fsPath;
+        filesOrUrls.push(filePath);
+        logger.log('[parseReviewRequest] ✓ Found file reference:', filePath);
+      } else {
+        logger.log('[parseReviewRequest] ✗ Reference does not contain URI');
+      }
+    }
+  }
+
+  // Set first file as primary fileOrUrl for backward compatibility
+  if (filesOrUrls.length > 0 && !fileOrUrl) {
+    fileOrUrl = filesOrUrls[0];
+    logger.log('[parseReviewRequest] Primary file:', fileOrUrl);
+    logger.log('[parseReviewRequest] Total files found:', filesOrUrls.length);
+  } else if (!fileOrUrl && filesOrUrls.length === 0) {
+    logger.log('[parseReviewRequest] WARNING: No file references found');
+  }
+
+  // Priority 5: Fall back to active editor (lowest priority)
+  if (!fileOrUrl && filesOrUrls.length === 0 && vscode.window.activeTextEditor) {
     fileOrUrl = vscode.window.activeTextEditor.document.uri.fsPath;
     filesOrUrls = [fileOrUrl];
     logger.log('[parseReviewRequest] Using active editor file:', fileOrUrl);
@@ -359,6 +576,9 @@ function parseReviewRequest(request: vscode.ChatRequest, command: string): Revie
   if (!fileOrUrl) {
     logger.log('[parseReviewRequest] WARNING: No file reference found!');
   }
+
+  // Detect ambiguous arguments
+  detectAmbiguousArguments(text, logger);
 
   // Parse diff range if present (only if not already set by URL parsing)
   if (command === 'diff' && !diffRange) {
@@ -379,7 +599,8 @@ function parseReviewRequest(request: vscode.ChatRequest, command: string): Revie
     fileOrUrl,
     filesOrUrls,
     reviewType,
-    diffRange
+    diffRange,
+    rulesetOverride
   };
 }
 

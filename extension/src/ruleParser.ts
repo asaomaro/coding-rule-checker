@@ -5,9 +5,12 @@ import * as logger from './logger';
 
 /**
  * Loads all rule files from a directory and parses them into chapters
+ * @param rulesPath - Path to the rules directory
+ * @param commonPromptPath - Optional path to a common prompt file to exclude from review chapters
  */
-export async function loadRules(rulesPath: string): Promise<RuleChapter[]> {
+export async function loadRules(rulesPath: string, commonPromptPath?: string): Promise<RuleChapter[]> {
   logger.log('loadRules: rulesPath =', rulesPath);
+  logger.log('loadRules: commonPromptPath =', commonPromptPath);
 
   const files = await fs.readdir(rulesPath);
   logger.log('loadRules: found files =', files);
@@ -21,6 +24,12 @@ export async function loadRules(rulesPath: string): Promise<RuleChapter[]> {
     const backslash = String.fromCharCode(92);
     const filePath = rulesPath + backslash + file;
     logger.log('loadRules: reading file =', filePath);
+
+    // Skip if this file is the common prompt file
+    if (commonPromptPath && path.resolve(filePath) === path.resolve(commonPromptPath)) {
+      logger.log('loadRules: skipping common prompt file =', filePath);
+      continue;
+    }
 
     const content = await fs.readFile(filePath, 'utf-8');
     logger.log('loadRules: file content length =', content.length);

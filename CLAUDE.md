@@ -47,7 +47,10 @@ run-lint.bat
 ### Testing the Extension
 1. Open project in VSCode
 2. Press `F5` to launch Extension Development Host
-3. In the new window, use: `@coding-rule-checker /review #file`
+3. In the new window, use:
+   - `@coding-rule-checker /review #file`
+   - `@coding-rule-checker /review #file:UserService.java`
+   - `@coding-rule-checker /review --ruleset=typescript-rules #file`
 
 ## Architecture
 
@@ -78,12 +81,12 @@ run-lint.bat
 ```
 .vscode/coding-rule-checker/
 ├── settings.json              # Global: model, prompt paths, file extension mappings
-├── system-prompt.md           # System-level prompt
+├── system-prompt.md           # System-level prompt (used for all LLM calls)
 ├── review-prompt.md           # Review prompt template
 ├── false-positive-prompt.md   # False positive check prompt
 ├── summary-prompt.md          # Summary generation prompt
 └── [ruleset-name]/
-    ├── rule-settings.json     # Ruleset-specific: iterations, output config
+    ├── rule-settings.json     # Ruleset-specific: iterations, output config, common prompt
     ├── review-results-templates.md
     └── rules/
         ├── 01_rule.md         # Markdown rule files (## for chapters, ### for rules)
@@ -93,11 +96,19 @@ run-lint.bat
 ### Review Request Types
 
 **Commands:**
-- `/review #file` - Review entire file content
-- `/diff [range] #file` - Review only git diff
-  - Range examples: `main..feature`, `abc123..def456`
+- `/review #file` - Review entire file content (VSCode reference)
+- `/review #file:UserService.java` - Review by filename
+- `/review #folder` - Review all files in folder
+- `/review --ruleset=typescript-rules #file` - Use specific ruleset
+- `/diff main..feature` - Review git diff
+  - Range examples: `main..feature`, `abc123..def456`, `v1.0.0..v2.0.0`
   - Without file: reviews all changed files in workspace
   - Without range: reviews uncommitted changes
+
+**Multiple Files:**
+- `/review #file1 #file2 #file3` - Multiple VSCode references
+- `/review #file:User.java #file:Order.java` - Multiple by name
+- `/review https://...file1.ts https://...file2.ts` - Multiple GitHub URLs
 
 **Source Detection:**
 - Local files: File path provided
@@ -166,6 +177,7 @@ More specific guidance.
 {
   "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
   "templatesPath": ".vscode/coding-rule-checker/sample-rule/review-results-templates.md",
+  "commonPromptPath": ".vscode/coding-rule-checker/sample-rule/rules/01_common.md",
   "fileOutput": {
     "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
@@ -185,6 +197,12 @@ More specific guidance.
   }
 }
 ```
+
+**Key Settings:**
+- `commonPromptPath` (optional): Path to a markdown file containing common rules/context to include in all chapter reviews
+  - If specified and the file is in the rules directory, it will be excluded from chapter-based reviews
+  - Commonly used for general coding standards that apply to all specific rules
+  - The content is prepended to each review prompt
 
 ## Important Implementation Details
 

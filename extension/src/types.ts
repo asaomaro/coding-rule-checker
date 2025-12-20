@@ -22,6 +22,7 @@ export interface RuleSettings {
   rulesPath: string;
   reviewPromptPath?: string;
   falsePositivePromptPath?: string;
+  commonPromptPath?: string;
   reviewIterations: {
     default: number;
     chapter?: Record<string, number>;
@@ -162,4 +163,5 @@ export interface ReviewRequest {
   filesOrUrls: string[];  // Multiple files or URLs
   reviewType: 'all' | 'diff';
   diffRange?: string;
+  rulesetOverride?: string[];  // Override rulesets specified by --ruleset flag
 }

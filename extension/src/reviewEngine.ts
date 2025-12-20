@@ -17,13 +17,14 @@ export async function performReviewIteration(
   code: CodeToReview,
   chapter: RuleChapter,
   systemPrompt: string,
+  commonPrompt: string,
   reviewPrompt: string,
   iterationNumber: number,
   model: vscode.LanguageModelChat,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewIteration> {
   // Build the review prompt
-  const prompt = buildReviewPrompt(code, chapter, reviewPrompt);
+  const prompt = buildReviewPrompt(code, chapter, commonPrompt, reviewPrompt);
 
   // Send to language model
   const messages = [
@@ -106,7 +107,7 @@ export async function performReviewIteration(
 /**
  * Builds the review prompt with code and rules
  */
-function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromptTemplate: string): string {
+function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, commonPrompt: string, reviewPromptTemplate: string): string {
   let codeContent = code.content;
 
   // If it's a diff, format with diff symbols and line numbers
@@ -162,6 +163,11 @@ function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, reviewPromp
     .replaceAll('{code}', codeContent)
     .replaceAll('{chapterTitle}', chapter.title)
     .replaceAll('{chapterContent}', chapter.content);
+
+  // Add common prompt if provided
+  if (commonPrompt) {
+    prompt = `${commonPrompt}\n\n${prompt}`;
+  }
 
   return prompt;
 }
@@ -295,6 +301,7 @@ export async function checkFalsePositive(
   code: CodeToReview,
   issue: ReviewIssue,
   chapter: RuleChapter,
+  systemPrompt: string,
   falsePositivePrompt: string,
   model: vscode.LanguageModelChat
 ): Promise<FalsePositiveCheck> {
@@ -302,6 +309,7 @@ export async function checkFalsePositive(
   const prompt = buildFalsePositivePrompt(code, issue, chapter, falsePositivePrompt);
 
   const messages = [
+    vscode.LanguageModelChatMessage.User(systemPrompt),
     vscode.LanguageModelChatMessage.User(prompt)
   ];
 
