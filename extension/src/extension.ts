@@ -6,7 +6,7 @@ import {
   loadPromptTemplate,
   getWorkspaceRoot,
   resolveWorkspacePath,
-  selectRulesetsForFile,
+  selectChaptersForFileByRulesets,
   selectChaptersForFile
 } from './config';
 import { loadRules } from './ruleParser';
@@ -28,6 +28,7 @@ import {
   saveUnifiedReviewResults
 } from './outputFormatter';
 import { ReviewRequest, CodeToReview, RuleChapter, Settings, RuleSettings } from './types';
+import { ConcurrencyQueue } from './concurrencyQueue';
 import * as logger from './logger';
 
 const PARTICIPANT_ID = 'coding-rule-checker';
@@ -122,6 +123,11 @@ async function handleChatRequest(
   // Load system prompt
   const systemPrompt = await loadPromptTemplate(workspaceRoot, settings.systemPromptPath);
 
+  // Create concurrency queue
+  const maxConcurrent = settings.maxConcurrentReviews || 10;
+  const queue = new ConcurrencyQueue(maxConcurrent);
+  stream.markdown(`⚙️ Max concurrent reviews: ${maxConcurrent}\n`);
+
   // Get code to review
   stream.markdown('📥 Retrieving code...\n');
   const codesToReview = await getCodeToReview(reviewRequest, workspaceRoot);
@@ -134,44 +140,30 @@ async function handleChatRequest(
   // Display the number of files to review
   stream.markdown(`📂 Found ${codesToReview.length} file(s) to review\n`);
 
-  // Process each code file
+  // Build all file × ruleset combinations for parallel processing
+  interface ReviewTask {
+    code: CodeToReview;
+    rulesetName: string;
+  }
+
+  const reviewTasks: ReviewTask[] = [];
+
+  // Determine ruleset to use
+  const rulesetName = reviewRequest.rulesetOverride?.[0] || settings.ruleset;
+  logger.log(`[Review] Using ruleset: ${rulesetName}`);
+
+  // Create review tasks for all files
   for (const code of codesToReview) {
-    stream.markdown(`\n🔍 Reviewing ${code.fileName}...\n`);
+    reviewTasks.push({ code, rulesetName });
+  }
 
-    // Determine which rulesets to apply
-    let rulesetNames: string[];
+  stream.markdown(`📋 Total review tasks: ${reviewTasks.length} (files × rulesets)\n`);
+  stream.markdown(`🚀 Starting parallel review with max ${maxConcurrent} concurrent requests...\n\n`);
 
-    if (reviewRequest.rulesetOverride) {
-      // Use override rulesets from --ruleset flag
-      rulesetNames = reviewRequest.rulesetOverride;
-      stream.markdown(`📝 File: ${code.fileName}\n`);
-      stream.markdown(`📚 Using specified rulesets: ${rulesetNames.join(', ')}\n`);
-      logger.log('[Review] Using ruleset override:', rulesetNames);
-    } else {
-      // Auto-select rulesets based on file pattern matching
-      rulesetNames = selectRulesetsForFile(
-        code.filePath,
-        code.fileName,
-        settings,
-        workspaceRoot
-      );
-
-      stream.markdown(`📝 File: ${code.fileName}\n`);
-
-      if (rulesetNames.length === 0) {
-        stream.markdown(`⚠️ No rulesets configured for this file\n`);
-        continue;
-      }
-
-      stream.markdown(`📚 Applying rulesets: ${rulesetNames.join(', ')}\n`);
-    }
-
-    // Accumulate results from all rulesets
-    const allResults = [];
-
-    // Review with each ruleset
-    for (const rulesetName of rulesetNames) {
-      stream.markdown(`\n📖 Processing ruleset: ${rulesetName}...\n`);
+  // Execute all review tasks in parallel (queue will handle concurrency limits)
+  const allResults = await Promise.all(
+    reviewTasks.map(async ({ code, rulesetName }) => {
+      logger.log(`[Review] Starting: ${code.fileName} × ${rulesetName}`);
 
       // Load ruleset settings
       const ruleSettings = await loadRuleSettings(workspaceRoot, rulesetName);
@@ -185,34 +177,45 @@ async function handleChatRequest(
       if (ruleSettings.commonPromptPath) {
         commonPromptPath = resolveWorkspacePath(workspaceRoot, ruleSettings.commonPromptPath);
         commonPrompt = await loadPromptTemplate(workspaceRoot, ruleSettings.commonPromptPath);
-        stream.markdown(`📄 Loaded common prompt from: ${ruleSettings.commonPromptPath}\n`);
+        logger.log(`[Review] Loaded common prompt from: ${ruleSettings.commonPromptPath}`);
       }
 
       const allChapters = await loadRules(rulesPath, commonPromptPath);
+      logger.log(`[Review] Loaded ${allChapters.length} chapters from: ${rulesPath}`);
 
-      stream.markdown(`📚 Loaded ${allChapters.length} chapters from: ${rulesPath}\n`);
-
-      // Filter chapters based on file patterns
+      // Filter chapters based on settings.rulesets (chapter to file patterns mapping)
       const allChapterIds = allChapters.map(ch => ch.id);
-      const selectedChapterIds = selectChaptersForFile(
+      const selectedChapterIds = selectChaptersForFileByRulesets(
         code.filePath,
         code.fileName,
-        ruleSettings,
-        workspaceRoot,
-        allChapterIds
+        settings,
+        allChapterIds,
+        workspaceRoot
       );
 
-      let chaptersToReview = allChapters;
-      if (selectedChapterIds !== null) {
-        chaptersToReview = allChapters.filter(ch => selectedChapterIds.includes(ch.id));
-        stream.markdown(`🔍 Selected chapters: ${selectedChapterIds.join(', ')} (${chaptersToReview.length}/${allChapters.length})\n`);
-      } else {
-        stream.markdown(`🔍 Reviewing all ${chaptersToReview.length} chapters\n`);
+      let chaptersToReview = allChapters.filter(ch => selectedChapterIds.includes(ch.id));
+      logger.log(`[Review] Chapter filter by rulesets: ${selectedChapterIds.join(', ')} (${chaptersToReview.length}/${allChapters.length})`);
+
+      // Further filter chapters based on file patterns (chapterFilters in rule-settings.json)
+      if (ruleSettings.chapterFilters) {
+        const filteredChapterIds = chaptersToReview.map(ch => ch.id);
+        const additionalFilteredIds = selectChaptersForFile(
+          code.filePath,
+          code.fileName,
+          ruleSettings,
+          workspaceRoot,
+          filteredChapterIds
+        );
+
+        if (additionalFilteredIds !== null) {
+          chaptersToReview = chaptersToReview.filter(ch => additionalFilteredIds.includes(ch.id));
+          logger.log(`[Review] Additional file pattern filter: ${additionalFilteredIds.join(', ')} (${chaptersToReview.length}/${allChapters.length})`);
+        }
       }
 
       if (chaptersToReview.length === 0) {
-        stream.markdown(`⚠️ No chapters selected for review\n`);
-        continue;
+        logger.log(`[Review] No chapters selected for review`);
+        return null;
       }
 
       // Load prompts
@@ -235,56 +238,60 @@ async function handleChatRequest(
         reviewPrompt,
         falsePositivePrompt,
         model,
+        queue,
         (progress) => {
           stream.progress(progress.message);
         }
       );
 
-      allResults.push(result);
-      stream.markdown(`✓ Completed ruleset: ${rulesetName}\n`);
+      logger.log(`[Review] Completed: ${code.fileName} × ${rulesetName}`);
+      return result;
+    })
+  );
+
+  // Filter out null results
+  const validResults = allResults.filter(r => r !== null);
+
+  // Output unified results to chat
+  if (validResults.length > 0) {
+    stream.markdown('\n\n## 📊 Review Results\n\n');
+
+    const showRulesWithNoIssues = settings.showRulesWithNoIssues || false;
+
+    for (const result of validResults) {
+      stream.markdown(`### ${result.rulesetName}\n`);
+      stream.markdown(formatForChat(result, showRulesWithNoIssues));
     }
 
-    // Output unified results to chat
-    if (allResults.length > 0) {
-      stream.markdown('\n\n## 📊 Review Results\n\n');
+    // Calculate totals
+    const totalIssuesAll = validResults.reduce((sum, r) => sum + r.totalIssues, 0);
+    stream.markdown(`\n**Total issues found: ${totalIssuesAll}**\n`);
 
-      const showChaptersWithNoIssues = settings.showChaptersWithNoIssues || false;
+    // Load template
+    const template = await loadPromptTemplate(workspaceRoot, settings.templatesPath);
 
-      for (const result of allResults) {
-        stream.markdown(`### ${result.rulesetName}\n`);
-        stream.markdown(formatForChat(result, showChaptersWithNoIssues));
+    // Save unified results to file if enabled and workspace is open
+    if (isWorkspaceOpen && settings.fileOutput.enabled) {
+      try {
+        logger.log('Attempting to save unified review results...');
+        const outputPath = await saveUnifiedReviewResults(validResults, settings, workspaceRoot, template);
+        logger.log('Review results saved successfully to:', outputPath);
+        stream.markdown(`\n💾 Review results saved to: [${path.basename(outputPath)}](${vscode.Uri.file(outputPath)})\n`);
+      } catch (error) {
+        logger.error('Failed to save review results:', error);
+        stream.markdown(`\n⚠️ Failed to save review results: ${error instanceof Error ? error.message : String(error)}\n`);
       }
-
-      // Calculate totals
-      const totalIssuesAll = allResults.reduce((sum, r) => sum + r.totalIssues, 0);
-      stream.markdown(`\n**Total issues found: ${totalIssuesAll}**\n`);
-
-      // Load template
-      const template = await loadPromptTemplate(workspaceRoot, settings.templatesPath);
-
-      // Save unified results to file if enabled and workspace is open
-      if (isWorkspaceOpen && settings.fileOutput.enabled) {
-        try {
-          logger.log('Attempting to save unified review results...');
-          const outputPath = await saveUnifiedReviewResults(allResults, settings, workspaceRoot, template);
-          logger.log('Review results saved successfully to:', outputPath);
-          stream.markdown(`\n💾 Review results saved to: [${path.basename(outputPath)}](${vscode.Uri.file(outputPath)})\n`);
-        } catch (error) {
-          logger.error('Failed to save review results:', error);
-          stream.markdown(`\n⚠️ Failed to save review results: ${error instanceof Error ? error.message : String(error)}\n`);
-        }
-      } else {
-        if (!isWorkspaceOpen) {
-          logger.log('File output skipped: No workspace open');
-        } else if (!settings.fileOutput.enabled) {
-          logger.log('File output skipped: Disabled in settings');
-        }
+    } else {
+      if (!isWorkspaceOpen) {
+        logger.log('File output skipped: No workspace open');
+      } else if (!settings.fileOutput.enabled) {
+        logger.log('File output skipped: Disabled in settings');
       }
-
-      // Show detailed results
-      stream.markdown('\n---\n\n## 📋 Detailed Results\n\n');
-      stream.markdown(formatUnifiedReviewResults(allResults, template, showChaptersWithNoIssues));
     }
+
+    // Show detailed results
+    stream.markdown('\n---\n\n## 📋 Detailed Results\n\n');
+    stream.markdown(formatUnifiedReviewResults(validResults, template, showRulesWithNoIssues));
   }
 
   stream.markdown('\n\n✅ Review completed!\n');

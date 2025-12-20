@@ -4,6 +4,7 @@ import {
   RuleChapter,
   ReviewResult,
   ChapterReviewResult,
+  RuleReviewResult,
   ReviewIteration,
   FalsePositiveCheck,
   ReviewIssue,
@@ -20,6 +21,7 @@ import {
   getChapterReviewIterations,
   getChapterFalsePositiveIterations
 } from './ruleParser';
+import { ConcurrencyQueue } from './concurrencyQueue';
 
 /**
  * Reviews code with parallel processing
@@ -34,6 +36,7 @@ export async function reviewCodeParallel(
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
+  queue: ConcurrencyQueue,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult> {
   const chapterResults: ChapterReviewResult[] = [];
@@ -60,6 +63,7 @@ export async function reviewCodeParallel(
       reviewPromptTemplate,
       falsePositivePromptTemplate,
       model,
+      queue,
       undefined  // Don't pass progressCallback to individual iterations
     );
 
@@ -106,6 +110,7 @@ async function reviewChapter(
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
+  queue: ConcurrencyQueue,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ChapterReviewResult> {
   // Get iteration counts for this chapter
@@ -127,6 +132,7 @@ async function reviewChapter(
         reviewPromptTemplate,
         i,
         model,
+        queue,
         progressCallback
       )
     );
@@ -148,7 +154,7 @@ async function reviewChapter(
       const checkPromises: Promise<FalsePositiveCheck>[] = [];
       for (let i = 0; i < falsePositiveIterations; i++) {
         checkPromises.push(
-          checkFalsePositive(code, issue, chapter, systemPrompt, falsePositivePromptTemplate, model).then(
+          checkFalsePositive(code, issue, chapter, systemPrompt, falsePositivePromptTemplate, model, queue).then(
             (check) => ({ ...check, issueIndex })
           )
         );
@@ -162,11 +168,52 @@ async function reviewChapter(
     issues = filterFalsePositives(issues, falsePositiveChecks);
   }
 
+  // Group issues by rule ID
+  const ruleResults = groupIssuesByRule(issues, chapter);
+
   return {
     chapterId: chapter.id,
     chapterTitle: chapter.title,
-    issues
+    ruleResults,
+    issues  // Keep for backward compatibility
   };
+}
+
+/**
+ * Groups issues by rule ID to create hierarchical structure
+ */
+function groupIssuesByRule(issues: ReviewIssue[], chapter: RuleChapter): RuleReviewResult[] {
+  const ruleMap = new Map<string, RuleReviewResult>();
+
+  // Initialize all rules from the chapter
+  for (const rule of chapter.rules) {
+    ruleMap.set(rule.id, {
+      ruleId: rule.id,
+      ruleTitle: rule.title,
+      level: rule.level,
+      issues: []
+    });
+  }
+
+  // Group issues by ruleId
+  for (const issue of issues) {
+    const ruleId = issue.ruleId;
+
+    if (!ruleMap.has(ruleId)) {
+      // Create entry for rules not in the chapter metadata (fallback)
+      ruleMap.set(ruleId, {
+        ruleId: ruleId,
+        ruleTitle: issue.ruleTitle,
+        level: 3, // Default to level 3 (###)
+        issues: []
+      });
+    }
+
+    ruleMap.get(ruleId)!.issues.push(issue);
+  }
+
+  // Convert map to array and return only rules with issues (or all rules if showRulesWithNoIssues is true)
+  return Array.from(ruleMap.values());
 }
 
 /**
@@ -182,32 +229,26 @@ export async function reviewMultipleFiles(
   reviewPromptTemplate: string,
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
+  queue: ConcurrencyQueue,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult[]> {
-  const results: ReviewResult[] = [];
+  // Process all files in parallel (queue will handle concurrency limits)
+  const filePromises = files.map((file) =>
+    reviewCodeParallel(
+      file,
+      chapters,
+      ruleSettings,
+      rulesetName,
+      systemPrompt,
+      commonPrompt,
+      reviewPromptTemplate,
+      falsePositivePromptTemplate,
+      model,
+      queue,
+      progressCallback
+    )
+  );
 
-  // Process files in parallel (with a limit to avoid overwhelming the API)
-  const CONCURRENT_LIMIT = 3;
-  for (let i = 0; i < files.length; i += CONCURRENT_LIMIT) {
-    const batch = files.slice(i, i + CONCURRENT_LIMIT);
-    const batchPromises = batch.map((file) =>
-      reviewCodeParallel(
-        file,
-        chapters,
-        ruleSettings,
-        rulesetName,
-        systemPrompt,
-        commonPrompt,
-        reviewPromptTemplate,
-        falsePositivePromptTemplate,
-        model,
-        progressCallback
-      )
-    );
-
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-  }
-
+  const results = await Promise.all(filePromises);
   return results;
 }

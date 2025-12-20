@@ -16,8 +16,12 @@ export async function loadSettings(workspaceRoot: string): Promise<Settings> {
     const settings = JSON.parse(content) as Settings;
 
     // Validate required fields
-    if (!settings.model || !settings.systemPromptPath || !settings.summaryPromptPath || !settings.rulesets) {
-      throw new Error('Missing required fields in settings.json');
+    if (!settings.model || !settings.systemPromptPath || !settings.summaryPromptPath || !settings.ruleset) {
+      throw new Error('Missing required fields in settings.json (model, systemPromptPath, summaryPromptPath, ruleset)');
+    }
+
+    if (!settings.rulesets) {
+      throw new Error('Missing rulesets in settings.json (chapter to file patterns mapping)');
     }
 
     if (!settings.templatesPath) {
@@ -130,6 +134,75 @@ export function resolveWorkspacePath(workspaceRoot: string, relativePath: string
 }
 
 /**
+ * Selects chapters for a file based on pattern matching in settings.rulesets
+ *
+ * Logic:
+ * - Chapters WITHOUT patterns in settings.rulesets: Always reviewed
+ * - Chapters WITH patterns in settings.rulesets: Only reviewed if file matches at least one pattern
+ *
+ * @param filePath - The file path (can be absolute or relative to workspace)
+ * @param fileName - The file name (used for pattern matching)
+ * @param settings - The settings containing chapter to pattern mapping
+ * @param allChapterIds - All available chapter IDs from the loaded rules
+ * @param workspaceRoot - The workspace root (optional, for relative path calculation)
+ * @returns Array of chapter IDs to review
+ */
+export function selectChaptersForFileByRulesets(
+  filePath: string,
+  fileName: string,
+  settings: Settings,
+  allChapterIds: string[],
+  workspaceRoot?: string
+): string[] {
+  // Calculate relative path from workspace root if available
+  let relativePath = fileName;
+  if (workspaceRoot && filePath.startsWith(workspaceRoot)) {
+    relativePath = path.relative(workspaceRoot, filePath);
+    // Normalize to forward slashes for consistent pattern matching
+    relativePath = relativePath.split(path.sep).join('/');
+  }
+
+  logger.log('[selectChaptersForFileByRulesets] File name:', fileName);
+  logger.log('[selectChaptersForFileByRulesets] Relative path:', relativePath);
+  logger.log('[selectChaptersForFileByRulesets] All chapter IDs:', allChapterIds);
+
+  const selectedChapters: string[] = [];
+
+  for (const chapterId of allChapterIds) {
+    const patterns = settings.rulesets[chapterId];
+
+    // Chapter not in settings.rulesets → always review
+    if (!patterns || patterns.length === 0) {
+      logger.log(`[selectChaptersForFileByRulesets] Chapter ${chapterId}: No patterns, always review`);
+      selectedChapters.push(chapterId);
+      continue;
+    }
+
+    // Chapter has patterns → check if file matches
+    let matches = false;
+    for (const pattern of patterns) {
+      const matchFileName = minimatch(fileName, pattern);
+      const matchRelativePath = minimatch(relativePath, pattern);
+      if (matchFileName || matchRelativePath) {
+        matches = true;
+        logger.log(`[selectChaptersForFileByRulesets] Chapter ${chapterId}: Matched pattern "${pattern}"`);
+        break;
+      }
+    }
+
+    if (matches) {
+      selectedChapters.push(chapterId);
+    } else {
+      logger.log(`[selectChaptersForFileByRulesets] Chapter ${chapterId}: No pattern matched, skipping`);
+    }
+  }
+
+  logger.log('[selectChaptersForFileByRulesets] Selected chapters:', selectedChapters);
+  return selectedChapters;
+}
+
+/**
+ * @deprecated This function is no longer used. Use selectChaptersForFileByRulesets instead.
  * Selects rulesets for a file based on pattern matching
  * Supports:
  * - Extension matching: ".ts" matches any .ts file

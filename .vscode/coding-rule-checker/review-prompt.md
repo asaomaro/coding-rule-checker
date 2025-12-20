@@ -33,10 +33,11 @@ Please review the above code against the coding rules specified in the chapter.
 For each violation found:
 
 1. Identify the exact line number
-2. Extract the problematic code snippet
-3. Explain why it violates the rule
-4. Provide a concrete suggestion for fixing it
-5. **Provide a fixed code example** showing the corrected code
+2. **Identify which specific rule** (### or ####) in the chapter content the code violates
+3. Extract the problematic code snippet
+4. Explain why it violates the rule
+5. Provide a concrete suggestion for fixing it
+6. **Provide a fixed code example** showing the corrected code
 
 ## Output Format
 
@@ -59,6 +60,8 @@ Please output your findings in JSON format with the following structure:
 ```
 
 **Important:** For each issue, you must provide:
+- `ruleId`: The exact ID from the rule heading (e.g., "1.1" from "### 1.1 Rule Title" or "1.1.1" from "#### 1.1.1 Sub-rule")
+- `ruleTitle`: The exact title from the rule heading
 - `codeSnippet`: The exact problematic code from the file (PURE CODE ONLY - remove line numbers, diff symbols like `+`/`-`, and any prefixes)
 - `fixedCodeSnippet`: A concrete code example showing how to fix the issue (PURE CODE ONLY - not just a description)
 

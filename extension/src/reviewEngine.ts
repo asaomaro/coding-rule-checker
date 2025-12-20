@@ -8,6 +8,7 @@ import {
   ProgressInfo
 } from './types';
 import { parseDiff } from './codeRetriever';
+import { ConcurrencyQueue } from './concurrencyQueue';
 import * as logger from './logger';
 
 /**
@@ -21,6 +22,7 @@ export async function performReviewIteration(
   reviewPrompt: string,
   iterationNumber: number,
   model: vscode.LanguageModelChat,
+  queue: ConcurrencyQueue,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewIteration> {
   // Build the review prompt
@@ -42,11 +44,17 @@ export async function performReviewIteration(
   logger.log('Code file name:', code.fileName);
 
   try {
-    logger.log('Calling model.sendRequest...');
-    const startTime = Date.now();
-    const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-    const requestTime = Date.now() - startTime;
-    logger.log(`Request returned after ${requestTime}ms`);
+    // Execute LLM request through the queue
+    const response = await queue.run(async () => {
+      logger.log('Calling model.sendRequest...');
+      const startTime = Date.now();
+      const result = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+      const requestTime = Date.now() - startTime;
+      logger.log(`Request returned after ${requestTime}ms`);
+      return result;
+    });
+
+    const requestTime = Date.now();
 
     logger.log('Streaming response text...');
 
@@ -303,7 +311,8 @@ export async function checkFalsePositive(
   chapter: RuleChapter,
   systemPrompt: string,
   falsePositivePrompt: string,
-  model: vscode.LanguageModelChat
+  model: vscode.LanguageModelChat,
+  queue: ConcurrencyQueue
 ): Promise<FalsePositiveCheck> {
   // Build the false positive check prompt
   const prompt = buildFalsePositivePrompt(code, issue, chapter, falsePositivePrompt);
@@ -313,7 +322,10 @@ export async function checkFalsePositive(
     vscode.LanguageModelChatMessage.User(prompt)
   ];
 
-  const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+  // Execute LLM request through the queue
+  const response = await queue.run(async () => {
+    return await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+  });
 
   // Parse response
   let responseText = '';

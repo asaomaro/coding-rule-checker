@@ -13,7 +13,8 @@
       "WebSearch",
       "Bash(gh api:*)",
       "Bash(cat:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

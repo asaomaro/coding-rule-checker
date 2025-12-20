@@ -3,19 +3,16 @@
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
-  "showChaptersWithNoIssues": true,
-  "_comment_showChaptersWithNoIssues": "Optional: If true, chapters with no issues will be displayed in review results",
+  "maxConcurrentReviews": 20,
+  "showRulesWithNoIssues": true,
+  "ruleset": "java-rule",
   "fileOutput": {
     "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
   },
   "rulesets": {
-    ".js": ["sample-rule"],
-    ".ts": ["sample-rule"],
-    ".jsx": ["sample-rule"],
-    ".tsx": ["sample-rule"],
-    ".py": ["sample-rule"],
-    ".java": ["java-rule"]
+    "1": ["*.component.ts", "*.service.ts"],
+    "3": ["*.test.ts", "*.spec.ts"]
   }
 }

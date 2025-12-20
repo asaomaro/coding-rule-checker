@@ -5,9 +5,11 @@ export interface Settings {
   model: string;
   systemPromptPath: string;
   summaryPromptPath: string;
-  rulesets: Record<string, string[]>;
+  ruleset: string; // The ruleset name to use
+  rulesets: Record<string, string[]>; // Chapter ID to file patterns mapping (e.g., "01": ["*.component.ts"])
   templatesPath: string;
-  showChaptersWithNoIssues?: boolean;
+  showRulesWithNoIssues?: boolean;
+  maxConcurrentReviews?: number;
   fileOutput: {
     enabled: boolean;
     outputDir: string;
@@ -132,12 +134,23 @@ export interface ReviewResult {
 }
 
 /**
+ * Review result for a single rule (### or ####)
+ */
+export interface RuleReviewResult {
+  ruleId: string;
+  ruleTitle: string;
+  level: number; // 3 for ###, 4 for ####
+  issues: ReviewIssue[];
+}
+
+/**
  * Review result for a single chapter
  */
 export interface ChapterReviewResult {
   chapterId: string;
   chapterTitle: string;
-  issues: ReviewIssue[];
+  ruleResults: RuleReviewResult[];
+  issues: ReviewIssue[]; // Deprecated: kept for backward compatibility, use ruleResults instead
 }
 
 /**

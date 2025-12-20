@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ReviewResult, Settings } from './types';
+import { ReviewResult, Settings, RuleReviewResult } from './types';
 
 /**
  * Extracts a template section from the template content
@@ -47,7 +47,7 @@ function filePathToLink(filePath: string, fileName: string): string {
 /**
  * Formats unified review results using a template
  */
-export function formatUnifiedReviewResults(results: ReviewResult[], template: string, showChaptersWithNoIssues: boolean = false): string {
+export function formatUnifiedReviewResults(results: ReviewResult[], template: string, showRulesWithNoIssues: boolean = false): string {
   if (results.length === 0) {
     return template;
   }
@@ -83,8 +83,20 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
     '<!-- NO_ISSUES_CHAPTER_SECTION_END -->'
   );
 
-  const issueTemplate = extractTemplateSection(
+  const ruleTemplate = extractTemplateSection(
     chapterTemplate,
+    '<!-- RULE_SECTION_START -->',
+    '<!-- RULE_SECTION_END -->'
+  );
+
+  const noIssuesRuleTemplate = extractTemplateSection(
+    chapterTemplate,
+    '<!-- NO_ISSUES_RULE_SECTION_START -->',
+    '<!-- NO_ISSUES_RULE_SECTION_END -->'
+  );
+
+  const issueTemplate = extractTemplateSection(
+    ruleTemplate,
     '<!-- ISSUE_START -->',
     '<!-- ISSUE_END -->'
   );
@@ -104,50 +116,84 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
     let chapterSections = '';
 
     for (const chapter of result.chapterResults) {
-      if (!showChaptersWithNoIssues && chapter.issues.length === 0) continue;
+      const hasAnyIssues = chapter.ruleResults.some(rule => rule.issues.length > 0);
 
-      // Use different template based on whether there are issues
-      if (chapter.issues.length === 0) {
-        // No issues - use the NO_ISSUES template
-        let currentChapterSection = noIssuesChapterTemplate;
-        currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
-        currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
-        chapterSections += currentChapterSection + '\n';
-      } else {
-        // Has issues - use the regular template
-        let currentChapterSection = chapterTemplate;
+      // Skip chapter if it has no issues and showRulesWithNoIssues is false
+      if (!showRulesWithNoIssues && !hasAnyIssues) continue;
 
-        // Replace chapter-level placeholders
-        currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
-        currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+      let currentChapterSection = chapterTemplate;
 
-        // Build issue sections
-        let issueSections = '';
+      // Replace chapter-level placeholders
+      currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
+      currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
 
-        for (let i = 0; i < chapter.issues.length; i++) {
-          const issue = chapter.issues[i];
-          let currentIssueSection = issueTemplate;
+      // Build rule sections
+      let ruleSections = '';
 
-          // Replace issue-level placeholders with indentation awareness for multi-line values
-          currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
-          currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
-          currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
-          currentIssueSection = replaceWithIndent(currentIssueSection, '{codeSnippet}', issue.codeSnippet);
-          currentIssueSection = replaceWithIndent(currentIssueSection, '{reason}', issue.reason);
-          currentIssueSection = replaceWithIndent(currentIssueSection, '{suggestion}', issue.suggestion);
-          currentIssueSection = replaceWithIndent(currentIssueSection, '{fixedCodeSnippet}', issue.fixedCodeSnippet || '');
+      for (const ruleResult of chapter.ruleResults) {
+        if (!showRulesWithNoIssues && ruleResult.issues.length === 0) continue;
 
-          issueSections += currentIssueSection + '\n';
+        // Determine rule header based on level (### for level 3, #### for level 4)
+        const ruleHeader = '#'.repeat(ruleResult.level);
+
+        if (ruleResult.issues.length === 0) {
+          // No issues - use the NO_ISSUES template
+          let currentRuleSection = noIssuesRuleTemplate;
+          currentRuleSection = currentRuleSection.replace(/{ruleHeader}/g, ruleHeader);
+          currentRuleSection = currentRuleSection.replace(/{ruleId}/g, ruleResult.ruleId);
+          currentRuleSection = currentRuleSection.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
+          ruleSections += currentRuleSection + '\n';
+        } else {
+          // Has issues - use the regular template
+          let currentRuleSection = ruleTemplate;
+
+          // Replace rule-level placeholders
+          currentRuleSection = currentRuleSection.replace(/{ruleHeader}/g, ruleHeader);
+          currentRuleSection = currentRuleSection.replace(/{ruleId}/g, ruleResult.ruleId);
+          currentRuleSection = currentRuleSection.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
+
+          // Build issue sections
+          let issueSections = '';
+
+          for (let i = 0; i < ruleResult.issues.length; i++) {
+            const issue = ruleResult.issues[i];
+            let currentIssueSection = issueTemplate;
+
+            // Replace issue-level placeholders with indentation awareness for multi-line values
+            currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
+            currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
+            currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{codeSnippet}', issue.codeSnippet);
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{reason}', issue.reason);
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{suggestion}', issue.suggestion);
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{fixedCodeSnippet}', issue.fixedCodeSnippet || '');
+
+            issueSections += currentIssueSection + '\n';
+          }
+
+          // Replace issue sections in rule template
+          currentRuleSection = currentRuleSection.replace(
+            /<!-- ISSUE_START -->[\s\S]*?<!-- ISSUE_END -->/,
+            issueSections.trim()
+          );
+
+          ruleSections += currentRuleSection + '\n';
         }
-
-        // Replace issue sections in chapter template
-        currentChapterSection = currentChapterSection.replace(
-          /<!-- ISSUE_START -->[\s\S]*?<!-- ISSUE_END -->/,
-          issueSections.trim()
-        );
-
-        chapterSections += currentChapterSection + '\n';
       }
+
+      // Replace rule sections in chapter template
+      currentChapterSection = currentChapterSection.replace(
+        /<!-- RULE_SECTION_START -->[\s\S]*?<!-- RULE_SECTION_END -->/,
+        ruleSections.trim()
+      );
+
+      // Remove NO_ISSUES_RULE_SECTION template (already processed above)
+      currentChapterSection = currentChapterSection.replace(
+        /<!-- NO_ISSUES_RULE_SECTION_START -->[\s\S]*?<!-- NO_ISSUES_RULE_SECTION_END -->/g,
+        ''
+      );
+
+      chapterSections += currentChapterSection + '\n';
     }
 
     // Replace chapter sections in ruleset template
@@ -214,7 +260,7 @@ export async function saveUnifiedReviewResults(
 /**
  * Formats review result for chat display
  */
-export function formatForChat(result: ReviewResult, showChaptersWithNoIssues: boolean = false): string {
+export function formatForChat(result: ReviewResult, showRulesWithNoIssues: boolean = false): string {
   let output = `**Review completed for ${result.fileName}**\n\n`;
 
   if (result.totalIssues === 0) {
@@ -225,19 +271,29 @@ export function formatForChat(result: ReviewResult, showChaptersWithNoIssues: bo
   output += `Found ${result.totalIssues} issue(s):\n\n`;
 
   for (const chapter of result.chapterResults) {
-    if (!showChaptersWithNoIssues && chapter.issues.length === 0) {
+    const chapterIssueCount = chapter.ruleResults.reduce((sum, rule) => sum + rule.issues.length, 0);
+
+    if (!showRulesWithNoIssues && chapterIssueCount === 0) {
       continue;
     }
 
-    output += `**${chapter.chapterTitle}** (${chapter.issues.length} issue(s))\n`;
+    output += `**${chapter.chapterTitle}** (${chapterIssueCount} issue(s))\n`;
 
-    for (const issue of chapter.issues.slice(0, 3)) {
-      // Show first 3 issues
-      output += `- Line ${issue.lineNumber}: ${issue.reason}\n`;
-    }
+    for (const ruleResult of chapter.ruleResults) {
+      if (!showRulesWithNoIssues && ruleResult.issues.length === 0) continue;
 
-    if (chapter.issues.length > 3) {
-      output += `- ... and ${chapter.issues.length - 3} more issue(s)\n`;
+      if (ruleResult.issues.length > 0) {
+        output += `  **${ruleResult.ruleId} ${ruleResult.ruleTitle}** (${ruleResult.issues.length} issue(s))\n`;
+
+        for (const issue of ruleResult.issues.slice(0, 2)) {
+          // Show first 2 issues per rule
+          output += `  - Line ${issue.lineNumber}: ${issue.reason}\n`;
+        }
+
+        if (ruleResult.issues.length > 2) {
+          output += `  - ... and ${ruleResult.issues.length - 2} more issue(s)\n`;
+        }
+      }
     }
 
     output += '\n';

@@ -66,10 +66,16 @@ run-lint.bat
 ### Key Architectural Patterns
 
 **Parallel Execution Strategy:**
-- Reviews are executed chapter-by-chapter in parallel (not sequentially)
-- Each chapter can have multiple review iterations that run in parallel
-- False positive checks also run in parallel for each issue
-- This design significantly reduces total review time
+- **All levels are parallelized**: files, rulesets, chapters, iterations, and false positive checks
+- **Concurrency queue**: Global limit controlled by `maxConcurrentReviews` setting
+- **Queueing system**: Tasks exceeding the limit are queued and executed when slots become available
+- **Parallelization hierarchy** (from highest to lowest):
+  1. Files × Rulesets (all combinations run in parallel)
+  2. Chapters (within each file×ruleset)
+  3. Review iterations (within each chapter)
+  4. False positive checks (for each issue)
+- **Example**: 3 files × 2 rulesets × 5 chapters × 2 iterations = 60 parallel tasks (limited by maxConcurrentReviews)
+- This design significantly reduces total review time while preventing API rate limiting
 
 **Iteration System:**
 - Each chapter is reviewed N times (configurable via `reviewIterations`)
@@ -128,11 +134,18 @@ All types defined in `types.ts`:
 ### Data Flow for Review
 
 1. Parse request → determine source (local/GitHub) and type (all/diff)
-2. Load settings → determine rulesets by file extension
-3. For each ruleset:
+2. Load settings → get ruleset name from `settings.ruleset`
+3. For the ruleset:
    - Load rule-settings.json
    - Parse all Markdown files in rules/
-   - For each chapter in parallel:
+   - **Filter chapters** (two-level filtering):
+     - Level 1: Chapter-to-file-pattern filter (`rulesets` in settings.json)
+       - For each chapter:
+         - If chapter ID **not in rulesets**: Always review
+         - If chapter ID **in rulesets**: Review only if file matches patterns
+     - Level 2: Additional file pattern-based filter (`chapterFilters` in rule-settings.json)
+       - Optional: Further filters chapters based on file path patterns
+   - For each filtered chapter in parallel:
      - Run N review iterations in parallel
      - Aggregate iteration results
      - Run M false-positive checks in parallel
@@ -165,12 +178,33 @@ More specific guidance.
   "model": "copilot-gpt-4",
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "maxConcurrentReviews": 10,
+  "showRulesWithNoIssues": false,
+  "ruleset": "typescript-rules",
   "rulesets": {
-    ".ts": ["typescript-rules"],
-    ".js": ["javascript-rules"]
+    "1": ["*.component.ts", "*.service.ts"],
+    "3": ["*.test.ts", "*.spec.ts"],
+    "5": ["util/**/*.ts"]
   }
 }
 ```
+
+**Key Settings:**
+- `maxConcurrentReviews` (optional, default: 10): Maximum number of concurrent LLM requests
+  - Controls the global concurrency limit for all parallel review operations
+  - Higher values = faster reviews but may hit API rate limits
+  - Lower values = slower reviews but more stable
+  - Recommended: 5-15 depending on your API plan
+- `showRulesWithNoIssues` (optional, default: false): Show rule sections with no issues in output
+- `ruleset` (required): The ruleset name to use (e.g., "typescript-rules", "java-rules")
+- `rulesets`: **Chapter ID to file patterns mapping**
+  - Key: Chapter ID (e.g., "1", "2", "3")
+  - Value: Array of file patterns (glob patterns supported)
+  - **Logic**:
+    - Chapter **NOT in rulesets**: Reviewed for **all files**
+    - Chapter **in rulesets**: Reviewed only for files matching the patterns
+  - **Example**: `"1": ["*.component.ts"]` means Chapter 1 is only reviewed for component files
+  - **Patterns**: Support glob patterns (`*.component.ts`, `util/**/*.ts`, etc.)
 
 ### Ruleset Settings (`.vscode/coding-rule-checker/[ruleset]/rule-settings.json`)
 ```json
@@ -203,6 +237,7 @@ More specific guidance.
   - If specified and the file is in the rules directory, it will be excluded from chapter-based reviews
   - Commonly used for general coding standards that apply to all specific rules
   - The content is prepended to each review prompt
+- **Chapter filtering**: Now configured in `settings.json` via `rulesets` (chapter to file patterns mapping)
 
 ## Important Implementation Details
 
