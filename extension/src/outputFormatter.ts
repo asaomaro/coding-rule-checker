@@ -251,7 +251,8 @@ export async function saveUnifiedReviewResults(
   const outputPath = path.join(outputDir, outputFileName);
 
   // Format and save
-  const content = formatUnifiedReviewResults(results, template);
+  const showRulesWithNoIssues = settings.showRulesWithNoIssues || false;
+  const content = formatUnifiedReviewResults(results, template, showRulesWithNoIssues);
   await fs.writeFile(outputPath, content, 'utf-8');
 
   return outputPath;

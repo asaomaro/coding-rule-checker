@@ -10,9 +10,5 @@
     "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
-  },
-  "rulesets": {
-    "1": ["*.component.ts", "*.service.ts"],
-    "3": ["*.test.ts", "*.spec.ts"]
   }
 }

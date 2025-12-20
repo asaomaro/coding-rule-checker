@@ -139,10 +139,10 @@ All types defined in `types.ts`:
    - Load rule-settings.json
    - Parse all Markdown files in rules/
    - **Filter chapters** (two-level filtering):
-     - Level 1: Chapter-to-file-pattern filter (`rulesets` in settings.json)
+     - Level 1: Chapter-to-file-pattern filter (`chapterFilePatterns` in rule-settings.json)
        - For each chapter:
-         - If chapter ID **not in rulesets**: Always review
-         - If chapter ID **in rulesets**: Review only if file matches patterns
+         - If chapter ID **not in chapterFilePatterns**: Always review
+         - If chapter ID **in chapterFilePatterns**: Review only if file matches patterns
      - Level 2: Additional file pattern-based filter (`chapterFilters` in rule-settings.json)
        - Optional: Further filters chapters based on file path patterns
    - For each filtered chapter in parallel:
@@ -173,6 +173,8 @@ More specific guidance.
 ## Configuration
 
 ### Global Settings (`.vscode/coding-rule-checker/settings.json`)
+
+**Example 1: Single ruleset (simple mode)**
 ```json
 {
   "model": "copilot-gpt-4",
@@ -181,10 +183,33 @@ More specific guidance.
   "maxConcurrentReviews": 10,
   "showRulesWithNoIssues": false,
   "ruleset": "typescript-rules",
-  "rulesets": {
-    "1": ["*.component.ts", "*.service.ts"],
-    "3": ["*.test.ts", "*.spec.ts"],
-    "5": ["util/**/*.ts"]
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
+  }
+}
+```
+
+**Example 2: Multiple rulesets with file pattern matching (advanced mode)**
+```json
+{
+  "model": "copilot-gpt-4",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "maxConcurrentReviews": 10,
+  "showRulesWithNoIssues": false,
+  "ruleset": {
+    "common": ["*.java", "*.html"],
+    "app-rule": ["common/*.java", "component*.java", "*.sql"],
+    "web-rule": ["*.html", "*.css"]
+  },
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
   }
 }
 ```
@@ -196,15 +221,13 @@ More specific guidance.
   - Lower values = slower reviews but more stable
   - Recommended: 5-15 depending on your API plan
 - `showRulesWithNoIssues` (optional, default: false): Show rule sections with no issues in output
-- `ruleset` (required): The ruleset name to use (e.g., "typescript-rules", "java-rules")
-- `rulesets`: **Chapter ID to file patterns mapping**
-  - Key: Chapter ID (e.g., "1", "2", "3")
-  - Value: Array of file patterns (glob patterns supported)
-  - **Logic**:
-    - Chapter **NOT in rulesets**: Reviewed for **all files**
-    - Chapter **in rulesets**: Reviewed only for files matching the patterns
-  - **Example**: `"1": ["*.component.ts"]` means Chapter 1 is only reviewed for component files
-  - **Patterns**: Support glob patterns (`*.component.ts`, `util/**/*.ts`, etc.)
+- `ruleset` (required): Ruleset configuration
+  - **Simple mode (string)**: Single ruleset name (e.g., `"typescript-rules"`)
+  - **Advanced mode (object)**: Ruleset-to-file-patterns mapping
+    - Key: Ruleset name (e.g., `"common"`, `"app-rule"`)
+    - Value: Array of file patterns (glob patterns supported)
+    - Files matching multiple patterns will be reviewed by all matching rulesets
+    - Example: `"common/*.java"` matches all Java files in the `common` directory
 
 ### Ruleset Settings (`.vscode/coding-rule-checker/[ruleset]/rule-settings.json`)
 ```json
@@ -212,11 +235,6 @@ More specific guidance.
   "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
   "templatesPath": ".vscode/coding-rule-checker/sample-rule/review-results-templates.md",
   "commonPromptPath": ".vscode/coding-rule-checker/sample-rule/rules/01_common.md",
-  "fileOutput": {
-    "enabled": true,
-    "outputDir": ".vscode/coding-rule-checker/review-results",
-    "outputFileName": "reviewed_{originalFileName}.md"
-  },
   "reviewIterations": {
     "default": 3,
     "chapter": {
@@ -228,6 +246,11 @@ More specific guidance.
     "chapter": {
       "01": 3
     }
+  },
+  "chapterFilePatterns": {
+    "1": ["*.component.ts", "*.service.ts"],
+    "3": ["*.test.ts", "*.spec.ts"],
+    "5": ["util/**/*.ts"]
   }
 }
 ```
@@ -237,7 +260,14 @@ More specific guidance.
   - If specified and the file is in the rules directory, it will be excluded from chapter-based reviews
   - Commonly used for general coding standards that apply to all specific rules
   - The content is prepended to each review prompt
-- **Chapter filtering**: Now configured in `settings.json` via `rulesets` (chapter to file patterns mapping)
+- `chapterFilePatterns` (optional): **Chapter ID to file patterns mapping**
+  - Key: Chapter ID (e.g., "1", "2", "3")
+  - Value: Array of file patterns (glob patterns supported)
+  - **Logic**:
+    - Chapter **NOT in chapterFilePatterns**: Reviewed for **all files**
+    - Chapter **in chapterFilePatterns**: Reviewed only for files matching the patterns
+  - **Example**: `"1": ["*.component.ts"]` means Chapter 1 is only reviewed for component files
+  - **Patterns**: Support glob patterns (`*.component.ts`, `util/**/*.ts`, etc.)
 
 ## Important Implementation Details
 

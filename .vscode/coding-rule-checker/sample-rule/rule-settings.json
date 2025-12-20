@@ -13,5 +13,9 @@
     "chapter": {
       "1": 3
     }
+  },
+  "chapterFilePatterns": {
+    "1": ["*.component.ts", "*.service.ts"],
+    "3": ["*.test.ts", "*.spec.ts"]
   }
 }

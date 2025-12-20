@@ -6,7 +6,8 @@ import {
   loadPromptTemplate,
   getWorkspaceRoot,
   resolveWorkspacePath,
-  selectChaptersForFileByRulesets,
+  selectRulesetsForFileFromSettings,
+  selectChaptersForFileByChapterPatterns,
   selectChaptersForFile
 } from './config';
 import { loadRules } from './ruleParser';
@@ -148,13 +149,35 @@ async function handleChatRequest(
 
   const reviewTasks: ReviewTask[] = [];
 
-  // Determine ruleset to use
-  const rulesetName = reviewRequest.rulesetOverride?.[0] || settings.ruleset;
-  logger.log(`[Review] Using ruleset: ${rulesetName}`);
-
-  // Create review tasks for all files
+  // Create review tasks for all file × ruleset combinations
   for (const code of codesToReview) {
-    reviewTasks.push({ code, rulesetName });
+    // Determine rulesets to use for this file
+    let rulesetNames: string[];
+
+    if (reviewRequest.rulesetOverride) {
+      // Use override rulesets from --ruleset flag
+      rulesetNames = reviewRequest.rulesetOverride;
+      logger.log(`[Review] Using ruleset override for ${code.fileName}:`, rulesetNames);
+    } else {
+      // Auto-select rulesets based on settings.ruleset configuration
+      rulesetNames = selectRulesetsForFileFromSettings(
+        code.filePath,
+        code.fileName,
+        settings,
+        workspaceRoot
+      );
+      logger.log(`[Review] Selected rulesets for ${code.fileName}:`, rulesetNames);
+    }
+
+    if (rulesetNames.length === 0) {
+      logger.log(`[Review] No rulesets selected for ${code.fileName}, skipping`);
+      continue;
+    }
+
+    // Create a task for each file × ruleset combination
+    for (const rulesetName of rulesetNames) {
+      reviewTasks.push({ code, rulesetName });
+    }
   }
 
   stream.markdown(`📋 Total review tasks: ${reviewTasks.length} (files × rulesets)\n`);
@@ -183,18 +206,18 @@ async function handleChatRequest(
       const allChapters = await loadRules(rulesPath, commonPromptPath);
       logger.log(`[Review] Loaded ${allChapters.length} chapters from: ${rulesPath}`);
 
-      // Filter chapters based on settings.rulesets (chapter to file patterns mapping)
+      // Filter chapters based on RuleSettings.chapterFilePatterns (chapter to file patterns mapping)
       const allChapterIds = allChapters.map(ch => ch.id);
-      const selectedChapterIds = selectChaptersForFileByRulesets(
+      const selectedChapterIds = selectChaptersForFileByChapterPatterns(
         code.filePath,
         code.fileName,
-        settings,
+        ruleSettings,
         allChapterIds,
         workspaceRoot
       );
 
       let chaptersToReview = allChapters.filter(ch => selectedChapterIds.includes(ch.id));
-      logger.log(`[Review] Chapter filter by rulesets: ${selectedChapterIds.join(', ')} (${chaptersToReview.length}/${allChapters.length})`);
+      logger.log(`[Review] Chapter filter by chapterFilePatterns: ${selectedChapterIds.join(', ')} (${chaptersToReview.length}/${allChapters.length})`);
 
       // Further filter chapters based on file patterns (chapterFilters in rule-settings.json)
       if (ruleSettings.chapterFilters) {

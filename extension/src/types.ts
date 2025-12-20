@@ -5,8 +5,8 @@ export interface Settings {
   model: string;
   systemPromptPath: string;
   summaryPromptPath: string;
-  ruleset: string; // The ruleset name to use
-  rulesets: Record<string, string[]>; // Chapter ID to file patterns mapping (e.g., "01": ["*.component.ts"])
+  ruleset: string | Record<string, string[]>; // Single ruleset name OR ruleset-to-file-patterns mapping
+  rulesets?: Record<string, string[]>; // @deprecated: Use RuleSettings.chapterFilePatterns instead
   templatesPath: string;
   showRulesWithNoIssues?: boolean;
   maxConcurrentReviews?: number;
@@ -33,6 +33,7 @@ export interface RuleSettings {
     default: number;
     chapter?: Record<string, number>;
   };
+  chapterFilePatterns?: Record<string, string[]>; // Chapter ID to file patterns mapping (e.g., "1": ["*.component.ts"])
   chapterFilters?: {
     default?: string[];
     patterns?: Record<string, string[]>;

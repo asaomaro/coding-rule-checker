@@ -44,6 +44,7 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 
 ### 2. settings.jsonの作成
 
+**パターン1: 単一ルールセット（シンプルモード）**
 ```json
 {
   "model": "copilot-gpt-4",
@@ -57,11 +58,28 @@ Markdown形式で記述されたコーディングルールに基づき、静的
     "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
+  }
+}
+```
+
+**パターン2: 複数ルールセットとファイルパターンマッチング（アドバンスモード）**
+```json
+{
+  "model": "copilot-gpt-4",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "maxConcurrentReviews": 10,
+  "showRulesWithNoIssues": false,
+  "ruleset": {
+    "common": ["*.java", "*.html"],
+    "app-rule": ["common/*.java", "component*.java", "*.sql"],
+    "web-rule": ["*.html", "*.css"]
   },
-  "rulesets": {
-    "1": ["*.component.ts", "*.service.ts"],
-    "3": ["*.test.ts", "*.spec.ts"],
-    "5": ["util/**/*.ts"]
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
   }
 }
 ```
@@ -73,18 +91,17 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 - `systemPromptPath`: システムプロンプトファイルのパス
 - `summaryPromptPath`: サマリープロンプトファイルのパス
 - `templatesPath`: レビュー結果テンプレートファイルのパス
-- `ruleset`: 使用するルールセット名（例: "typescript-rules", "java-rules"）
+- `ruleset`: ルールセット設定
+  - **シンプルモード（文字列）**: 単一のルールセット名（例: `"typescript-rules"`）
+  - **アドバンスモード（オブジェクト）**: ルールセット名とファイルパターンのマッピング
+    - キー: ルールセット名（例: `"common"`, `"app-rule"`）
+    - 値: ファイルパターンの配列（Glob形式）
+    - 複数のパターンにマッチするファイルは、マッチした全てのルールセットでレビューされます
+    - 例: `"common/*.java"` は `common` ディレクトリ配下の全Javaファイルにマッチ
 - `fileOutput`: ファイル出力設定
   - `enabled`: ファイル出力の有効/無効
   - `outputDir`: 出力ディレクトリ
   - `outputFileName`: 出力ファイル名パターン
-- `rulesets`: **章番号とファイルパターンのマッピング**
-  - キー: 章番号（例: "1", "2", "3"）
-  - 値: ファイルパターンの配列
-  - **重要**:
-    - 章番号が**設定されていない**章 → **すべてのファイル**でレビュー
-    - 章番号が**設定されている**章 → **パターンに一致するファイル**のみでレビュー
-  - ファイルパターンはGlob形式をサポート（例: `*.component.ts`, `util/**/*.ts`）
 
 **オプション項目:**
 - `maxConcurrentReviews` (デフォルト: 10): 同時実行する最大LLMリクエスト数
@@ -93,43 +110,32 @@ Markdown形式で記述されたコーディングルールに基づき、静的
   - 低い値 = 遅いレビュー、ただし安定
 - `showRulesWithNoIssues` (デフォルト: false): 指摘がないルール項番も表示するかどうか
 
-#### rulesets の詳細な設定例
+#### ruleset（アドバンスモード）の詳細な設定例
 
-**例1: UIコンポーネントとテストで異なる章をレビュー**
+**例1: 共通ルールと特定ファイル向けルールを組み合わせる**
 ```json
 {
-  "ruleset": "typescript-rules",
-  "rulesets": {
-    "1": ["*.component.ts", "*.service.ts"],
-    "2": [],
-    "3": ["*.test.ts", "*.spec.ts"],
-    "4": ["util/**/*.ts", "helper/**/*.ts"]
+  "ruleset": {
+    "common": ["*.java", "*.html"],
+    "backend-rule": ["src/main/**/*.java", "*.sql"],
+    "frontend-rule": ["src/web/**/*.html", "*.css", "*.js"]
   }
 }
 ```
-- **章1**: `*.component.ts`と`*.service.ts`のみレビュー
-- **章2**: 設定なし（空配列） → すべてのファイルでレビュー
-- **章3**: テストファイル(`*.test.ts`, `*.spec.ts`)のみレビュー
-- **章4**: utilとhelperディレクトリ配下のファイルのみレビュー
-- **章5以降**: 設定なし → すべてのファイルでレビュー
+- `common/*.java` ファイルは `common` と `backend-rule` の両方でレビューされます
+- `src/web/index.html` ファイルは `common` と `frontend-rule` の両方でレビューされます
 
-**例2: 特定の章だけ特定のファイルに限定**
+**例2: ファイル種類ごとに異なるルールセット**
 ```json
 {
-  "ruleset": "java-rules",
-  "rulesets": {
-    "1": ["*Controller.java", "*Service.java"]
+  "ruleset": {
+    "java-rule": ["*.java"],
+    "sql-rule": ["*.sql"],
+    "web-rule": ["*.html", "*.css", "*.js"]
   }
 }
 ```
-- **章1**: ControllerとServiceクラスのみレビュー
-- **章2以降**: 設定なし → すべてのJavaファイルでレビュー
-
-**Globパターンの例:**
-- `*.component.ts` - 任意のディレクトリの `xxx.component.ts` にマッチ
-- `src/*.ts` - `src` 直下の `.ts` ファイルにマッチ
-- `src/**/*.ts` - `src` 配下の全ての `.ts` ファイルにマッチ（ネスト含む）
-- `**/*.test.ts` - 全ディレクトリの `xxx.test.ts` にマッチ
+- 各ファイルタイプは対応するルールセットでのみレビューされます
 
 ### 3. プロンプトテンプレートの作成
 
@@ -146,11 +152,6 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 {
   "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
   "templatesPath": ".vscode/coding-rule-checker/sample-rule/review-results-template.md",
-  "fileOutput": {
-    "enabled": true,
-    "outputDir": ".vscode/coding-rule-checker/review-results",
-    "outputFileName": "reviewed_{originalFileName}.md"
-  },
   "reviewIterations": {
     "default": 2,
     "chapter": {
@@ -159,6 +160,10 @@ Markdown形式で記述されたコーディングルールに基づき、静的
   },
   "falsePositiveCheckIterations": {
     "default": 2
+  },
+  "chapterFilePatterns": {
+    "1": ["*.component.ts", "*.service.ts"],
+    "3": ["*.test.ts", "*.spec.ts"]
   }
 }
 ```
@@ -166,11 +171,51 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 **設定項目の説明:**
 - `rulesPath` (必須): ルールファイルが格納されているディレクトリのパス
 - `templatesPath` (オプション): レビュー結果テンプレートのパス
-- `fileOutput`: ファイル出力設定
 - `reviewIterations`: レビューの反復回数設定
 - `falsePositiveCheckIterations`: 偽陽性チェックの反復回数設定
+- `chapterFilePatterns` (オプション): **章番号とファイルパターンのマッピング**
+  - キー: 章番号（例: "1", "2", "3"）
+  - 値: ファイルパターンの配列
+  - **重要**:
+    - 章番号が**設定されていない**章 → **すべてのファイル**でレビュー
+    - 章番号が**設定されている**章 → **パターンに一致するファイル**のみでレビュー
+  - ファイルパターンはGlob形式をサポート（例: `*.component.ts`, `util/**/*.ts`）
 
-**Note:** 章のフィルタリングは `settings.json` の `rulesets` で行います
+#### chapterFilePatterns の詳細な設定例
+
+**例1: UIコンポーネントとテストで異なる章をレビュー**
+```json
+{
+  "chapterFilePatterns": {
+    "1": ["*.component.ts", "*.service.ts"],
+    "2": [],
+    "3": ["*.test.ts", "*.spec.ts"],
+    "4": ["util/**/*.ts", "helper/**/*.ts"]
+  }
+}
+```
+- **章1**: `*.component.ts`と`*.service.ts`のみレビュー
+- **章2**: 設定なし（空配列） → すべてのファイルでレビュー
+- **章3**: テストファイル(`*.test.ts`, `*.spec.ts`)のみレビュー
+- **章4**: utilとhelperディレクトリ配下のファイルのみレビュー
+- **章5以降**: 設定なし → すべてのファイルでレビュー
+
+**例2: 特定の章だけ特定のファイルに限定**
+```json
+{
+  "chapterFilePatterns": {
+    "1": ["*Controller.java", "*Service.java"]
+  }
+}
+```
+- **章1**: ControllerとServiceクラスのみレビュー
+- **章2以降**: 設定なし → すべてのJavaファイルでレビュー
+
+**Globパターンの例:**
+- `*.component.ts` - 任意のディレクトリの `xxx.component.ts` にマッチ
+- `src/*.ts` - `src` 直下の `.ts` ファイルにマッチ
+- `src/**/*.ts` - `src` 配下の全ての `.ts` ファイルにマッチ（ネスト含む）
+- `**/*.test.ts` - 全ディレクトリの `xxx.test.ts` にマッチ
 
 ### 5. コーディングルールの記述
 

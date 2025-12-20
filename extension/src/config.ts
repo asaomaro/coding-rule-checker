@@ -16,13 +16,20 @@ export async function loadSettings(workspaceRoot: string): Promise<Settings> {
     const settings = JSON.parse(content) as Settings;
 
     // Validate required fields
-    if (!settings.model || !settings.systemPromptPath || !settings.summaryPromptPath || !settings.ruleset) {
-      throw new Error('Missing required fields in settings.json (model, systemPromptPath, summaryPromptPath, ruleset)');
+    if (!settings.model || !settings.systemPromptPath || !settings.summaryPromptPath) {
+      throw new Error('Missing required fields in settings.json (model, systemPromptPath, summaryPromptPath)');
     }
 
-    if (!settings.rulesets) {
-      throw new Error('Missing rulesets in settings.json (chapter to file patterns mapping)');
+    if (!settings.ruleset) {
+      throw new Error('Missing required field: ruleset');
     }
+
+    // Validate ruleset format
+    if (typeof settings.ruleset !== 'string' && typeof settings.ruleset !== 'object') {
+      throw new Error('ruleset must be either a string (single ruleset name) or an object (ruleset-to-patterns mapping)');
+    }
+
+    // rulesets is now optional (moved to RuleSettings.chapterFilePatterns)
 
     if (!settings.templatesPath) {
       throw new Error('Missing templatesPath in settings.json');
@@ -134,6 +141,142 @@ export function resolveWorkspacePath(workspaceRoot: string, relativePath: string
 }
 
 /**
+ * Selects rulesets for a file based on pattern matching in settings.ruleset
+ *
+ * If settings.ruleset is a string, returns that single ruleset.
+ * If settings.ruleset is an object (ruleset-to-patterns mapping), returns all matching rulesets.
+ *
+ * @param filePath - The file path (can be absolute or relative to workspace)
+ * @param fileName - The file name (used for pattern matching)
+ * @param settings - The settings containing ruleset configuration
+ * @param workspaceRoot - The workspace root (optional, for relative path calculation)
+ * @returns Array of ruleset names to apply
+ */
+export function selectRulesetsForFileFromSettings(
+  filePath: string,
+  fileName: string,
+  settings: Settings,
+  workspaceRoot?: string
+): string[] {
+  // If ruleset is a string, return it as a single-item array
+  if (typeof settings.ruleset === 'string') {
+    return [settings.ruleset];
+  }
+
+  // Calculate relative path from workspace root if available
+  let relativePath = fileName;
+  if (workspaceRoot && filePath.startsWith(workspaceRoot)) {
+    relativePath = path.relative(workspaceRoot, filePath);
+    // Normalize to forward slashes for consistent pattern matching
+    relativePath = relativePath.split(path.sep).join('/');
+  }
+
+  logger.log('[selectRulesetsForFileFromSettings] File name:', fileName);
+  logger.log('[selectRulesetsForFileFromSettings] Relative path:', relativePath);
+
+  const selectedRulesets: string[] = [];
+
+  // Iterate through ruleset-to-patterns mapping
+  for (const [rulesetName, patterns] of Object.entries(settings.ruleset)) {
+    let matches = false;
+
+    for (const pattern of patterns) {
+      const matchFileName = minimatch(fileName, pattern);
+      const matchRelativePath = minimatch(relativePath, pattern);
+      if (matchFileName || matchRelativePath) {
+        matches = true;
+        logger.log(`[selectRulesetsForFileFromSettings] Ruleset "${rulesetName}": Matched pattern "${pattern}"`);
+        break;
+      }
+    }
+
+    if (matches) {
+      selectedRulesets.push(rulesetName);
+    } else {
+      logger.log(`[selectRulesetsForFileFromSettings] Ruleset "${rulesetName}": No pattern matched`);
+    }
+  }
+
+  logger.log('[selectRulesetsForFileFromSettings] Selected rulesets:', selectedRulesets);
+  return selectedRulesets;
+}
+
+/**
+ * Selects chapters for a file based on pattern matching in RuleSettings.chapterFilePatterns
+ *
+ * Logic:
+ * - Chapters WITHOUT patterns in chapterFilePatterns: Always reviewed
+ * - Chapters WITH patterns in chapterFilePatterns: Only reviewed if file matches at least one pattern
+ *
+ * @param filePath - The file path (can be absolute or relative to workspace)
+ * @param fileName - The file name (used for pattern matching)
+ * @param ruleSettings - The rule settings containing chapter to pattern mapping
+ * @param allChapterIds - All available chapter IDs from the loaded rules
+ * @param workspaceRoot - The workspace root (optional, for relative path calculation)
+ * @returns Array of chapter IDs to review
+ */
+export function selectChaptersForFileByChapterPatterns(
+  filePath: string,
+  fileName: string,
+  ruleSettings: RuleSettings,
+  allChapterIds: string[],
+  workspaceRoot?: string
+): string[] {
+  // If no chapter file patterns configured, review all chapters
+  if (!ruleSettings.chapterFilePatterns) {
+    logger.log('[selectChaptersForFileByChapterPatterns] No chapter file patterns configured, reviewing all chapters');
+    return allChapterIds;
+  }
+
+  // Calculate relative path from workspace root if available
+  let relativePath = fileName;
+  if (workspaceRoot && filePath.startsWith(workspaceRoot)) {
+    relativePath = path.relative(workspaceRoot, filePath);
+    // Normalize to forward slashes for consistent pattern matching
+    relativePath = relativePath.split(path.sep).join('/');
+  }
+
+  logger.log('[selectChaptersForFileByChapterPatterns] File name:', fileName);
+  logger.log('[selectChaptersForFileByChapterPatterns] Relative path:', relativePath);
+  logger.log('[selectChaptersForFileByChapterPatterns] All chapter IDs:', allChapterIds);
+
+  const selectedChapters: string[] = [];
+
+  for (const chapterId of allChapterIds) {
+    const patterns = ruleSettings.chapterFilePatterns[chapterId];
+
+    // Chapter not in chapterFilePatterns → always review
+    if (!patterns || patterns.length === 0) {
+      logger.log(`[selectChaptersForFileByChapterPatterns] Chapter ${chapterId}: No patterns, always review`);
+      selectedChapters.push(chapterId);
+      continue;
+    }
+
+    // Chapter has patterns → check if file matches
+    let matches = false;
+    for (const pattern of patterns) {
+      const matchFileName = minimatch(fileName, pattern);
+      const matchRelativePath = minimatch(relativePath, pattern);
+      if (matchFileName || matchRelativePath) {
+        matches = true;
+        logger.log(`[selectChaptersForFileByChapterPatterns] Chapter ${chapterId}: Matched pattern "${pattern}"`);
+        break;
+      }
+    }
+
+    if (matches) {
+      selectedChapters.push(chapterId);
+    } else {
+      logger.log(`[selectChaptersForFileByChapterPatterns] Chapter ${chapterId}: No pattern matched, skipping`);
+    }
+  }
+
+  logger.log('[selectChaptersForFileByChapterPatterns] Selected chapters:', selectedChapters);
+  return selectedChapters;
+}
+
+/**
+ * @deprecated This function is no longer used. Use selectChaptersForFileByChapterPatterns instead.
  * Selects chapters for a file based on pattern matching in settings.rulesets
  *
  * Logic:
@@ -154,6 +297,12 @@ export function selectChaptersForFileByRulesets(
   allChapterIds: string[],
   workspaceRoot?: string
 ): string[] {
+  // If no rulesets configured, review all chapters
+  if (!settings.rulesets) {
+    logger.log('[selectChaptersForFileByRulesets] No rulesets configured, reviewing all chapters');
+    return allChapterIds;
+  }
+
   // Calculate relative path from workspace root if available
   let relativePath = fileName;
   if (workspaceRoot && filePath.startsWith(workspaceRoot)) {
@@ -242,6 +391,10 @@ export function selectRulesetsForFile(
   }
 
   const matches: PatternMatch[] = [];
+
+  if (!settings.rulesets) {
+    return [];
+  }
 
   for (const [pattern, rulesets] of Object.entries(settings.rulesets)) {
     let isMatch = false;
