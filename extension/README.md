@@ -1,48 +1,48 @@
-# Coding Rule Checker
+# コーディングルールチェッカー
 
-A VSCode extension that performs static code analysis based on coding rules written in Markdown format.
+Markdown形式で記述されたコーディングルールに基づき、静的コード解析を実行するVSCode拡張機能です。
 
-## Features
+## 機能
 
-- Review code against custom coding rules written in Markdown
-- Integrate seamlessly with GitHub Copilot Chat
-- Support for both local files and GitHub repositories
-- Review entire files or just the diff
-- Parallel processing for faster reviews
-- False positive detection to reduce noise
-- Customizable review templates and prompts
-- Save review results to files
+- Markdownで記述されたカスタムコーディングルールに対してコードをレビュー
+- GitHub Copilot Chatとシームレスに連携
+- ローカルファイルとGitHubリポジトリの両方をサポート
+- ファイル全体または差分（diff）のみをレビュー
+- 並列処理による高速なレビュー
+- 偽陽性検出によるノイズ削減
+- カスタマイズ可能なレビューテンプレートとプロンプト
+- レビュー結果をファイルに保存
 
-## Installation
+## インストール
 
-### From VSIX file
+### VSIXファイルから
 
-1. Download or build the `.vsix` file
-2. Open VSCode
-3. Go to Extensions view (`Ctrl+Shift+X`)
-4. Click the "..." menu and select "Install from VSIX..."
-5. Select the downloaded `.vsix` file
+1. `.vsix`ファイルをダウンロードまたはビルドします
+2. VSCodeを開きます
+3. 拡張機能ビューに移動します (`Ctrl+Shift+X`)
+4. 「...」メニューをクリックし、「VSIXからのインストール...」を選択します
+5. ダウンロードした`.vsix`ファイルを選択します
 
-### Build from source
+### ソースからビルド
 
-1. Clone the repository
-2. Run `npm install` in the extension folder
-3. Run `npm run compile` to build
-4. Press `F5` to launch Extension Development Host
+1. リポジトリをクローンします
+2. extensionフォルダで `npm install` を実行します
+3. `npm run compile` を実行してビルドします
+4. `F5`キーを押して拡張機能開発ホストを起動します
 
-### Requirements
+### 要件
 
-- VSCode 1.85.0 or higher
-- GitHub Copilot subscription
-- Node.js 20+ (for building from source)
+- VSCode 1.85.0 以上
+- GitHub Copilot サブスクリプション
+- Node.js 20+ (ソースからビルドする場合)
 
-## Configuration
+## 設定
 
-### 1. Create the configuration directory
+### 1. 設定ディレクトリの作成
 
-Create a `.vscode/coding-rule-checker` directory in your workspace.
+ワークスペースに `.vscode/coding-rule-checker` ディレクトリを作成します。
 
-### 2. Create settings.json
+### 2. settings.jsonの作成
 
 ```json
 {
@@ -56,16 +56,16 @@ Create a `.vscode/coding-rule-checker` directory in your workspace.
 }
 ```
 
-### 3. Create prompt templates
+### 3. プロンプトテンプレートの作成
 
-- `system-prompt.md`: System prompt for the AI reviewer
-- `review-prompt.md`: Template for review requests
-- `false-positive-prompt.md`: Template for false positive checks
-- `summary-prompt.md`: Template for review summaries
+- `system-prompt.md`: AIレビュアー向けのシステムプロンプト
+- `review-prompt.md`: レビューリクエスト用のテンプレート
+- `false-positive-prompt.md`: 偽陽性チェック用のテンプレート
+- `summary-prompt.md`: レビューサマリー用のテンプレート
 
-### 4. Create rule settings
+### 4. ルール設定の作成
 
-For each ruleset, create a `rule-settings.json`:
+各ルールセットに対して `rule-settings.json` を作成します:
 
 ```json
 {
@@ -88,113 +88,113 @@ For each ruleset, create a `rule-settings.json`:
 }
 ```
 
-### 5. Write your coding rules
+### 5. コーディングルールの記述
 
-Create Markdown files in your rules directory:
+ルールディレクトリにMarkdownファイルを作成します:
 
 ```markdown
-## 1. Code Quality Rules
+## 1. コード品質ルール
 
-### 1.1 Naming Conventions
+### 1.1 命名規則
 
-Variable and function names should be descriptive and follow camelCase.
+変数名と関数名は説明的であり、camelCaseに従う必要があります。
 
-### 1.2 Function Complexity
+### 1.2 関数の複雑さ
 
-Functions should be small and focused on a single responsibility.
+関数は小さく、単一の責務に集中する必要があります。
 ```
 
-## Usage
+## 使用方法
 
-### Review a specific file
+### 特定のファイルをレビュー
 
 ```
 @coding-rule-checker /review #file
 ```
 
-### Review git diff
+### git diffをレビュー
 
 ```
 @coding-rule-checker /diff main..feature #file
 ```
 
-### Review all changed files
+### 変更されたすべてのファイルをレビュー
 
 ```
 @coding-rule-checker /diff
 ```
 
-### Review GitHub repository
+### GitHubリポジトリをレビュー
 
 ```
 @coding-rule-checker /diff https://github.com/owner/repo main..feature
 ```
 
-## How It Works
+## 動作の仕組み
 
-1. **Code Retrieval**: Fetches code from local files or GitHub
-2. **Rule Loading**: Loads applicable rules based on file extension
-3. **Parallel Review**: Reviews each chapter in parallel with multiple iterations
-4. **False Positive Check**: Validates findings to reduce false positives
-5. **Aggregation**: Combines results from multiple iterations
-6. **Output**: Displays results in chat and optionally saves to file
+1. **コード取得**: ローカルファイルまたはGitHubからコードを取得します
+2. **ルール読み込み**: ファイル拡張子に基づいて適用可能なルールを読み込みます
+3. **並列レビュー**: 各章を複数回の反復処理で並列にレビューします
+4. **偽陽性チェック**: 偽陽性を減らすために検出結果を検証します
+5. **集約**: 複数回の反復処理の結果を結合します
+6. **出力**: 結果をチャットに表示し、オプションでファイルに保存します
 
-## Advanced Features
+## 高度な機能
 
-### Multiple Review Iterations
+### 複数回のレビュー反復
 
-Each chapter can be reviewed multiple times to improve accuracy. Results are aggregated using a voting mechanism.
+精度を向上させるために、各章を複数回レビューすることができます。結果は投票メカニズムを使用して集約されます。
 
-### False Positive Detection
+### 偽陽性検出
 
-Suspicious findings are checked multiple times to filter out false positives.
+疑わしい検出結果は、偽陽性を除外するために複数回チェックされます。
 
-### Custom Templates
+### カスタムテンプレート
 
-Customize review output format using Markdown templates with placeholders.
+プレースホルダを使用して、Markdownテンプレートでレビューの出力形式をカスタマイズします。
 
-### GitHub Integration
+### GitHub連携
 
-Uses `gh` CLI to fetch code from GitHub repositories, supporting:
-- Specific files
-- Pull requests
-- Commit ranges
-- Branch comparisons
+`gh` CLIを使用してGitHubリポジトリからコードを取得し、以下をサポートします:
+- 特定のファイル
+- プルリクエスト
+- コミット範囲
+- ブランチ比較
 
-## Requirements
+## 要件
 
-- VSCode 1.85.0 or higher
-- GitHub Copilot subscription
-- `gh` CLI (for GitHub integration)
+- VSCode 1.85.0 以上
+- GitHub Copilot サブスクリプション
+- `gh` CLI (GitHub連携用)
 
-## Extension Settings
+## 拡張機能の設定
 
-This extension contributes the following settings:
+この拡張機能は、以下の設定を提供します:
 
-- Configuration files in `.vscode/coding-rule-checker/`
-- Custom rule definitions in Markdown format
-- Prompt templates for AI interaction
+- `.vscode/coding-rule-checker/` 内の設定ファイル
+- Markdown形式のカスタムルール定義
+- AIとの対話用のプロンプトテンプレート
 
-## Known Issues
+## 既知の問題
 
-- Large files may take longer to review
-- GitHub API rate limits may apply
+- 大規模なファイルのレビューには時間がかかる場合があります
+- GitHub APIのレート制限が適用される場合があります
 
-## Release Notes
+## リリースノート
 
 ### 0.1.0
 
-Initial release with core features:
-- Code review based on Markdown rules
-- Copilot Chat integration
-- Local and GitHub support
-- Parallel processing
-- False positive detection
+初期リリース。主要機能:
+- Markdownルールに基づくコードレビュー
+- Copilot Chat連携
+- ローカルおよびGitHubのサポート
+- 並列処理
+- 偽陽性検出
 
-## Contributing
+## コントリビューション
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+コントリビューションを歓迎します！プルリクエストを気軽にサブミットしてください。
 
-## License
+## ライセンス
 
 MIT

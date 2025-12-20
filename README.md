@@ -1,135 +1,274 @@
-# Coding Rule Checker
+# コーディングルールチェッカー
 
-A VSCode extension that performs static code analysis based on coding rules written in Markdown format, integrated with GitHub Copilot Chat.
+Markdown形式で記述されたコーディングルールに基づき、静的コード解析を実行するVSCode拡張機能です。GitHub Copilot Chatと統合されています。
 
-## Overview
+## 概要
 
-Coding Rule Checker allows you to define custom coding rules in Markdown format and automatically review code against these rules using AI. It integrates seamlessly with GitHub Copilot Chat, making code reviews easy and efficient.
+コーディングルールチェッカーは、カスタムのコーディングルールをMarkdown形式で定義し、AIを使用してこれらのルールに対してコードを自動的にレビューすることができます。GitHub Copilot Chatとシームレスに統合されており、コードレビューを簡単かつ効率的に行えます。
 
-## Key Features
+## 主な機能
 
-- **Markdown-based Rules**: Define coding rules in simple Markdown format
-- **Copilot Chat Integration**: Review code directly from Copilot Chat
-- **Multi-source Support**: Review local files, git diffs, or GitHub repositories
-- **Parallel Processing**: Fast reviews with parallel chapter processing
-- **False Positive Detection**: Automatic validation to reduce false positives
-- **Customizable Output**: Configure review templates and output formats
-- **Multiple Rulesets**: Apply different rules to different file types
+- **Markdownベースのルール**: シンプルなMarkdown形式でコーディングルールを定義
+- **Copilot Chat連携**: 直感的なコマンドでCopilot Chatから直接コードをレビュー
+- **マルチソース対応**: ローカルファイル、フォルダ、git diff、またはGitHubリポジトリをレビュー
+- **複数ファイルレビュー**: 複数のファイルやフォルダ全体を一度のコマンドでレビュー
+- **ルールセットの上書き**: `--ruleset`フラグで使用するルールセットを指定
+- **並列処理**: 章ごとの並列処理による高速なレビュー
+- **偽陽性検出**: 偽陽性を減らすための自動検証
+- **カスタマイズ可能な出力**: クリック可能なリンク付きのレビューテンプレートと出力形式を設定
+- **進捗追跡**: ファイルとルールセット情報をリアルタイムで表示
+- **GitHub連携**: GitHubのURLから直接ファイルやdiffをレビュー
 
-## Quick Start
+## クイックスタート
 
-### 1. Install Dependencies
+### 1. 依存関係のインストール
 
 ```bash
 cd extension
 npm install
 ```
 
-### 2. Compile the Extension
+### 2. 拡張機能のコンパイル
 
 ```bash
 npm run compile
 ```
 
-### 3. Set Up Configuration
+### 3. 設定のセットアップ
 
-Create a `.vscode/coding-rule-checker` directory in your project with:
-- `settings.json` - Main configuration
-- Prompt templates (system, review, false-positive, summary)
-- Rule directories with Markdown rule files
+プロジェクトに `.vscode/coding-rule-checker` ディレクトリを作成し、以下を配置します:
+- `settings.json` - メイン設定
+- プロンプトテンプレート（システム、レビュー、偽陽性、サマリー）
+- Markdownルールファイルを含むルールディレクトリ
 
-Sample configuration files are provided in this repository.
+サンプル設定ファイルがこのリポジトリに提供されています。
 
-### 4. Install the Extension
+### 4. 拡張機能のインストール
 
-1. Open VSCode
-2. Press F5 to launch Extension Development Host
-3. Or package with `npm run package` and install the .vsix file
+1. VSCodeを開く
+2. F5キーを押して拡張機能開発ホストを起動
+3. または `npm run package` でパッケージ化し、.vsixファイルをインストール
 
-### 5. Use in Copilot Chat
+### 5. Copilot Chatでの使用
 
-```
+```bash
+# 単一ファイルのレビュー
 @coding-rule-checker /review #file
+
+# 複数ファイルのレビュー
+@coding-rule-checker /review #file1 #file2 #file3
+
+# フォルダ全体のレビュー
+@coding-rule-checker /review #folder
+
+# 特定のルールセットでレビュー
+@coding-rule-checker /review --ruleset=typescript-rules #file
+
+# git diffのレビュー
 @coding-rule-checker /diff main..feature
+
+# GitHubファイルのレビュー
+@coding-rule-checker /review https://github.com/owner/repo/blob/main/file.ts
 ```
 
-## Project Structure
+詳細な例については、[使用例](#使用例)を参照してください。
+
+## プロジェクト構造
 
 ```
 .
-├── extension/              # VSCode extension source
-│   ├── src/               # TypeScript source files
-│   ├── dist/              # Compiled JavaScript
-│   └── package.json       # Extension manifest
+├── extension/              # VSCode拡張機能のソース
+│   ├── src/               # TypeScriptソースファイル
+│   ├── dist/              # コンパイル済みJavaScript
+│   └── package.json       # 拡張機能マニフェスト
 ├── .vscode/
-│   └── coding-rule-checker/  # Sample configuration
+│   └── coding-rule-checker/  # サンプル設定
 │       ├── settings.json
-│       ├── *-prompt.md    # Prompt templates
-│       └── sample-rule/   # Sample rule set
+│       ├── *-prompt.md    # プロンプトテンプレート
+│       └── sample-rule/   # サンプルルールセット
 │           ├── rule-settings.json
-│           └── rules/     # Markdown rule files
-├── spec.md                # Detailed specification
-└── README.md              # This file
+│           └── rules/     # Markdownルールファイル
+├── spec.md                # 詳細仕様書
+└── README.md              # このファイル
 ```
 
-## Documentation
+## 使用例
 
-- [spec.md](spec.md) - Detailed specification in Japanese
-- [extension/README.md](extension/README.md) - Extension documentation
+###基本的なファイルレビュー
 
-## Development
+```bash
+# VSCodeファイル参照を使用したレビュー
+@coding-rule-checker /review #file
 
-### Build
+# ファイル名パターンによるレビュー
+@coding-rule-checker /review #file:UserService.java
+
+# 複数ファイルを名前でレビュー
+@coding-rule-checker /review #file:UserService.java #file:OrderController.java #file:ProductRepository.java
+```
+
+### フォルダレビュー
+
+```bash
+# フォルダ全体を再帰的にレビュー
+@coding-rule-checker /review #folder
+
+# フォルダを名前でレビュー
+@coding-rule-checker /review #folder:src/components
+```
+
+### ルールセットの上書き
+
+```bash
+# 特定のルールセットを使用（自動検出を上書き）
+@coding-rule-checker /review --ruleset=typescript-rules #file
+
+# 複数のルールセットを使用
+@coding-rule-checker /review -r typescript-rules,security-rules #file
+```
+
+### Git Diff レビュー
+
+```bash
+# ブランチ間のdiffをレビュー
+@coding-rule-checker /diff main..feature
+
+# 特定のファイルのdiffをレビュー
+@coding-rule-checker /diff main..feature #file
+
+# コミットされていない変更をレビュー
+@coding-rule-checker /diff
+```
+
+### GitHub連携
+
+```bash
+# 単一のGitHubファイルをレビュー
+@coding-rule-checker /review https://github.com/owner/repo/blob/main/src/app.ts
+
+# 複数のGitHubファイルをレビュー
+@coding-rule-checker /review https://github.com/.../file1.ts https://github.com/.../file2.ts
+
+# GitHubのdiffをレビュー
+@coding-rule-checker /diff https://github.com/owner/repo/compare/main...feature
+```
+
+### 高度な使用法
+
+```bash
+# パスベースのレビュー（絶対パスまたは拡張子付きの相対パス）
+@coding-rule-checker /review ./src/app.ts ../utils/helper.ts
+
+# ルールセットの上書きとフォルダレビューの組み合わせ
+@coding-rule-checker /review --ruleset=java-rules #folder:src/main/java
+```
+
+## コマンドリファレンス
+
+### `/review` - コードのレビュー
+
+コーディングルールに対してファイル全体またはフォルダ全体をレビューします。
+
+**構文:**
+```
+/review [--ruleset=<rulesets>] <target>
+/review [-r <rulesets>] <target>
+```
+
+**ターゲット:**
+- `#file` - VSCodeファイル参照（UIで選択）
+- `#file:filename` - ファイル名パターンによるファイル
+- `#folder` - VSCodeフォルダ参照（UIで選択）
+- `#folder:foldername` - フォルダ名パターンによるフォルダ
+- `https://github.com/...` - GitHubファイルURL
+- `./path/to/file.ts` - 明示的なパス（拡張子付き）
+
+**オプション:**
+- `--ruleset=name` or `-r name` - ルールセットを上書き（複数指定の場合はカンマ区切り）
+
+### `/diff` - Diffのレビュー
+
+git diffの変更されたコードのみをレビューします。
+
+**構文:**
+```
+/diff [range] [#file]
+```
+
+**例:**
+- `/diff` - コミットされていない変更をレビュー
+- `/diff main..feature` - ブランチ間のdiffをレビュー
+- `/diff v1.0.0..v2.0.0` - タグ間のdiffをレビュー
+- `/diff main..feature #file` - 特定のファイルのdiffをレビュー
+
+## ドキュメント
+
+- [spec.md](spec.md) - 詳細仕様書（日本語）
+- [extension/README.md](extension/README.md) - 拡張機能のドキュメント
+- [CLAUDE.md](CLAUDE.md) - Claude Code向け開発ガイド
+
+## 開発
+
+### ビルド
 
 ```bash
 cd extension
 npm run compile
 ```
 
-### Watch Mode
+### ウォッチモード
 
 ```bash
 npm run watch
 ```
 
-### Lint
+### リント
 
 ```bash
 npm run lint
 ```
 
-### Package
+### パッケージ化
 
 ```bash
 npm run package
 ```
 
-## Architecture
+## アーキテクチャ
 
-The extension consists of several key components:
+この拡張機能は、いくつかの主要コンポーネントで構成されています:
 
-1. **Config Manager**: Loads settings and rule configurations
-2. **Rule Parser**: Parses Markdown rule files into structured data
-3. **Code Retriever**: Fetches code from local files or GitHub
-4. **Review Engine**: Executes reviews using Copilot Language Model
-5. **Parallel Reviewer**: Manages parallel review processing
-6. **Output Formatter**: Formats and saves review results
+1. **設定マネージャー** (`config.ts`): 設定とルール構成をロードします
+2. **ルールパーサー** (`ruleParser.ts`): Markdownルールファイルを構造化データに解析します
+3. **コードリトリーバー** (`codeRetriever.ts`): ローカルファイル、git、またはGitHubからコードを取得します
+4. **レビューエンジン** (`reviewEngine.ts`): Copilot言語モデルを使用してレビューを実行します
+5. **並列レビュアー** (`parallelReviewer.ts`): 並列レビュー処理を管理します
+6. **出力フォーマッター** (`outputFormatter.ts`): クリック可能なリンク付きでレビュー結果をフォーマットし、保存します
+7. **ロガー** (`logger.ts`): デバッグおよび診断ロギングを提供します
 
-## Requirements
+### 主要な設計パターン
 
-- VSCode 1.85.0 or higher
-- GitHub Copilot subscription
-- Node.js 20+ (for development)
-- `gh` CLI (for GitHub integration)
+- **並列実行**: 速度向上のため、レビューは章ごとに並列で実行されます
+- **複数回の反復**: 各章はN回レビューされ、投票ベースで集約されます
+- **偽陽性フィルタリング**: 自動検証チェックにより、誤った検出を減らします
+- **柔軟な入力**: VSCode参照、ファイルパターン、GitHub URL、明示的なパスをサポート
+- **ルールセットの上書き**: `--ruleset`フラグによる手動でのルールセット選択が自動検出をバイパスします
 
-## Contributing
+## 要件
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+- VSCode 1.85.0 以上
+- GitHub Copilot サブスクリプション
+- Node.js 20+ (開発用)
+- `gh` CLI (GitHub連携用)
 
-## License
+## コントリビューション
+
+コントリビューションを歓迎します！Issueやプルリクエストを気軽にサブミットしてください。
+
+## ライセンス
 
 MIT
 
-## Author
+## 著者
 
-Developed based on the specification in spec.md
+spec.mdの仕様書に基づいて開発されました
