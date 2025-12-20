@@ -314,7 +314,8 @@ async function handleChatRequest(
 
     // Show detailed results
     stream.markdown('\n---\n\n## 📋 Detailed Results\n\n');
-    stream.markdown(formatUnifiedReviewResults(validResults, template, showRulesWithNoIssues));
+    const outputFormat = settings.outputFormat || 'normal';
+    stream.markdown(formatUnifiedReviewResults(validResults, template, showRulesWithNoIssues, outputFormat));
   }
 
   stream.markdown('\n\n✅ Review completed!\n');

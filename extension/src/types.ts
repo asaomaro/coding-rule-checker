@@ -10,6 +10,7 @@ export interface Settings {
   templatesPath: string;
   showRulesWithNoIssues?: boolean;
   maxConcurrentReviews?: number;
+  outputFormat?: 'normal' | 'table'; // Output format: 'normal' (default) or 'table'
   fileOutput: {
     enabled: boolean;
     outputDir: string;

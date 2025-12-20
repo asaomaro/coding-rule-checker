@@ -45,9 +45,142 @@ function filePathToLink(filePath: string, fileName: string): string {
 }
 
 /**
+ * Formats unified review results using a template (table format)
+ */
+function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: string): string {
+  if (results.length === 0) {
+    return template;
+  }
+
+  const firstResult = results[0];
+  let output = template;
+
+  // Replace file-level placeholders
+  output = output.replace(/{fileName}/g, filePathToLink(firstResult.filePath, firstResult.fileName));
+  output = output.replace(/{filePath}/g, firstResult.filePath);
+  output = output.replace(/{diffDetails}/g, firstResult.diffDetails || '');
+
+  // Calculate total issues
+  const totalIssuesAll = results.reduce((sum, r) => sum + r.totalIssues, 0);
+  output = output.replace(/{totalIssues}/g, totalIssuesAll.toString());
+
+  // Extract templates
+  const tableRulesetTemplate = extractTemplateSection(
+    template,
+    '<!-- TABLE_RULESET_SECTION_START -->',
+    '<!-- TABLE_RULESET_SECTION_END -->'
+  );
+
+  const tableChapterTemplate = extractTemplateSection(
+    tableRulesetTemplate,
+    '<!-- TABLE_CHAPTER_SECTION_START -->',
+    '<!-- TABLE_CHAPTER_SECTION_END -->'
+  );
+
+  const tableHeaderTemplate = extractTemplateSection(
+    tableChapterTemplate,
+    '<!-- TABLE_HEADER_START -->',
+    '<!-- TABLE_HEADER_END -->'
+  );
+
+  const tableRowTemplate = extractTemplateSection(
+    tableChapterTemplate,
+    '<!-- TABLE_ROW_START -->',
+    '<!-- TABLE_ROW_END -->'
+  );
+
+  // Build ruleset sections
+  let rulesetSections = '';
+
+  for (const result of results) {
+    let currentRulesetSection = tableRulesetTemplate;
+
+    // Replace ruleset-level placeholders
+    currentRulesetSection = currentRulesetSection.replace(/{rulesetName}/g, result.rulesetName);
+    currentRulesetSection = currentRulesetSection.replace(/{issueCount}/g, result.totalIssues.toString());
+    currentRulesetSection = currentRulesetSection.replace(/{reviewedChapters}/g, result.reviewedChapters.join(', '));
+
+    // Build chapter sections
+    let chapterSections = '';
+
+    for (const chapter of result.chapterResults) {
+      // Build table rows for this chapter
+      let tableRows = '';
+
+      for (const ruleResult of chapter.ruleResults) {
+        for (const issue of ruleResult.issues) {
+          let currentRow = tableRowTemplate;
+
+          // Escape pipe characters in code snippets and reason/suggestion
+          const escapedCodeSnippet = issue.codeSnippet.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+          const escapedReason = issue.reason.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+          const escapedSuggestion = issue.suggestion.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+          const escapedFixedCodeSnippet = (issue.fixedCodeSnippet || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+
+          currentRow = currentRow.replace(/{ruleId}/g, issue.ruleId);
+          currentRow = currentRow.replace(/{ruleTitle}/g, issue.ruleTitle);
+          currentRow = currentRow.replace(/{lineNumber}/g, issue.lineNumber.toString());
+          currentRow = currentRow.replace(/{codeSnippet}/g, escapedCodeSnippet);
+          currentRow = currentRow.replace(/{reason}/g, escapedReason);
+          currentRow = currentRow.replace(/{suggestion}/g, escapedSuggestion);
+          currentRow = currentRow.replace(/{fixedCodeSnippet}/g, escapedFixedCodeSnippet);
+
+          tableRows += currentRow + '\n';
+        }
+      }
+
+      // Only create chapter section if there are issues
+      if (tableRows.trim()) {
+        let currentChapterSection = tableChapterTemplate;
+
+        // Replace chapter-level placeholders
+        currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
+        currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+
+        // Replace table content in chapter template
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- TABLE_HEADER_START -->[\s\S]*?<!-- TABLE_HEADER_END -->/,
+          tableHeaderTemplate
+        );
+
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- TABLE_ROW_START -->[\s\S]*?<!-- TABLE_ROW_END -->/,
+          tableRows.trim()
+        );
+
+        chapterSections += currentChapterSection + '\n';
+      }
+    }
+
+    // Replace chapter sections in ruleset template
+    currentRulesetSection = currentRulesetSection.replace(
+      /<!-- TABLE_CHAPTER_SECTION_START -->[\s\S]*?<!-- TABLE_CHAPTER_SECTION_END -->/,
+      chapterSections.trim()
+    );
+
+    rulesetSections += currentRulesetSection + '\n';
+  }
+
+  // Replace {rulesetResults} in main template
+  output = output.replace(/{rulesetResults}/g, rulesetSections.trim());
+
+  // Remove template sections (both table and normal format templates)
+  output = output.replace(/<!-- TABLE_RULESET_SECTION_START -->[\s\S]*?<!-- TABLE_RULESET_SECTION_END -->/g, '');
+  output = output.replace(/<!-- RULESET_SECTION_START -->[\s\S]*?<!-- RULESET_SECTION_END -->/g, '');
+
+  return output;
+}
+
+/**
  * Formats unified review results using a template
  */
-export function formatUnifiedReviewResults(results: ReviewResult[], template: string, showRulesWithNoIssues: boolean = false): string {
+export function formatUnifiedReviewResults(results: ReviewResult[], template: string, showRulesWithNoIssues: boolean = false, outputFormat: 'normal' | 'table' = 'normal'): string {
+  // Use table format if requested
+  if (outputFormat === 'table') {
+    return formatUnifiedReviewResultsAsTable(results, template);
+  }
+
+  // Normal format (existing logic)
   if (results.length === 0) {
     return template;
   }
@@ -214,8 +347,9 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
   // Replace {rulesetResults} in main template
   output = output.replace(/{rulesetResults}/g, rulesetSections.trim());
 
-  // Remove template sections (these are only for defining the format)
-  output = output.replace(/<!-- RULESET_SECTION_START -->[\s\S]*<!-- RULESET_SECTION_END -->/g, '');
+  // Remove template sections (both table and normal format templates)
+  output = output.replace(/<!-- RULESET_SECTION_START -->[\s\S]*?<!-- RULESET_SECTION_END -->/g, '');
+  output = output.replace(/<!-- TABLE_RULESET_SECTION_START -->[\s\S]*?<!-- TABLE_RULESET_SECTION_END -->/g, '');
 
   return output;
 }
@@ -252,7 +386,8 @@ export async function saveUnifiedReviewResults(
 
   // Format and save
   const showRulesWithNoIssues = settings.showRulesWithNoIssues || false;
-  const content = formatUnifiedReviewResults(results, template, showRulesWithNoIssues);
+  const outputFormat = settings.outputFormat || 'normal';
+  const content = formatUnifiedReviewResults(results, template, showRulesWithNoIssues, outputFormat);
   await fs.writeFile(outputPath, content, 'utf-8');
 
   return outputPath;

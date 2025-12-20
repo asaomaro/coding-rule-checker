@@ -109,6 +109,10 @@ Markdown形式で記述されたコーディングルールに基づき、静的
   - 高い値 = 速いレビュー、ただしAPIレート制限のリスク
   - 低い値 = 遅いレビュー、ただし安定
 - `showRulesWithNoIssues` (デフォルト: false): 指摘がないルール項番も表示するかどうか
+- `outputFormat` (デフォルト: "normal"): レビュー結果の出力形式
+  - `"normal"`: 通常の階層形式（章・ルール単位）
+  - `"table"`: 表形式（章番号、行番号、コード、理由、修正案、修正例をカラムで表示）
+  - テンプレートカスタマイズ: `review-results-template.md` で `TABLE_RULESET_SECTION`, `TABLE_HEADER`, `TABLE_ROW` マーカーを使用して定義
 
 #### ruleset（アドバンスモード）の詳細な設定例
 

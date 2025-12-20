@@ -372,7 +372,9 @@ export function aggregateReviewIterations(iterations: ReviewIteration[]): Review
 
   for (const iteration of iterations) {
     for (const issue of iteration.issues) {
-      const key = `${issue.ruleId}-${issue.lineNumber}-${issue.codeSnippet}`;
+      // Use ruleId and lineNumber only for duplicate detection
+      // This ensures same rule on same line is treated as duplicate regardless of code snippet variations
+      const key = `${issue.ruleId}-${issue.lineNumber}`;
 
       if (issueMap.has(key)) {
         const existing = issueMap.get(key)!;

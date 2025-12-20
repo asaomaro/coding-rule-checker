@@ -221,6 +221,10 @@ More specific guidance.
   - Lower values = slower reviews but more stable
   - Recommended: 5-15 depending on your API plan
 - `showRulesWithNoIssues` (optional, default: false): Show rule sections with no issues in output
+- `outputFormat` (optional, default: "normal"): Output format for review results
+  - `"normal"`: Standard hierarchical format with chapters and rules
+  - `"table"`: Markdown table format with columns for chapter, line number, code, reason, suggestion, and fix
+  - Template customization: Define table format in `review-results-template.md` using `TABLE_RULESET_SECTION`, `TABLE_HEADER`, and `TABLE_ROW` markers
 - `ruleset` (required): Ruleset configuration
   - **Simple mode (string)**: Single ruleset name (e.g., `"typescript-rules"`)
   - **Advanced mode (object)**: Ruleset-to-file-patterns mapping
