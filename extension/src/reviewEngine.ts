@@ -366,8 +366,13 @@ function buildFalsePositivePrompt(
 
 /**
  * Aggregates multiple review iterations
+ * @param iterations - Array of review iterations
+ * @param detectionThreshold - Threshold for issue detection (0.00-1.00)
+ *   - 0: Issue must appear in ALL iterations (100%)
+ *   - 1: Issue must appear at least ONCE (1/N or more)
+ *   - 0.5: Issue must appear in majority of iterations (default)
  */
-export function aggregateReviewIterations(iterations: ReviewIteration[]): ReviewIssue[] {
+export function aggregateReviewIterations(iterations: ReviewIteration[], detectionThreshold: number = 0.5): ReviewIssue[] {
   const issueMap = new Map<string, ReviewIssue & { count: number }>();
 
   for (const iteration of iterations) {
@@ -385,12 +390,27 @@ export function aggregateReviewIterations(iterations: ReviewIteration[]): Review
     }
   }
 
-  // Filter issues that appeared in majority of iterations
-  const threshold = Math.ceil(iterations.length / 2);
+  // Calculate required count based on threshold
+  // Clamp threshold to valid range [0, 1]
+  const clampedThreshold = Math.max(0, Math.min(1, detectionThreshold));
+
+  let requiredCount: number;
+  if (clampedThreshold === 0) {
+    // 0 means all iterations must detect the issue
+    requiredCount = iterations.length;
+  } else if (clampedThreshold === 1) {
+    // 1 means at least one iteration must detect the issue
+    requiredCount = 1;
+  } else {
+    // For values between 0 and 1, calculate proportional threshold
+    // Use ceiling to ensure we round up (stricter detection)
+    requiredCount = Math.ceil(iterations.length * clampedThreshold);
+  }
+
   const aggregatedIssues: ReviewIssue[] = [];
 
   for (const [, issue] of issueMap) {
-    if (issue.count >= threshold) {
+    if (issue.count >= requiredCount) {
       const { count, ...issueWithoutCount } = issue;
       aggregatedIssues.push(issueWithoutCount);
     }

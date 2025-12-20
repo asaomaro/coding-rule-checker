@@ -6,6 +6,7 @@
   "maxConcurrentReviews": 20,
   "showRulesWithNoIssues": true,
   "outputFormat": "table",
+  "issueDetectionThreshold": 0.5,
   "ruleset": {
     "java-rule": ["*.java"],
     "sample-rule": ["*.java"]

@@ -47,7 +47,7 @@ function filePathToLink(filePath: string, fileName: string): string {
 /**
  * Formats unified review results using a template (table format)
  */
-function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: string): string {
+function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: string, showRulesWithNoIssues: boolean = false): string {
   if (results.length === 0) {
     return template;
   }
@@ -104,32 +104,53 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
     let chapterSections = '';
 
     for (const chapter of result.chapterResults) {
+      const hasAnyIssues = chapter.ruleResults.some(rule => rule.issues.length > 0);
+
+      // Skip chapter if it has no issues and showRulesWithNoIssues is false
+      if (!showRulesWithNoIssues && !hasAnyIssues) continue;
+
       // Build table rows for this chapter
       let tableRows = '';
 
       for (const ruleResult of chapter.ruleResults) {
-        for (const issue of ruleResult.issues) {
+        if (!showRulesWithNoIssues && ruleResult.issues.length === 0) continue;
+
+        if (ruleResult.issues.length === 0) {
+          // No issues - add a row with "No issues found" message
           let currentRow = tableRowTemplate;
-
-          // Escape pipe characters in code snippets and reason/suggestion
-          const escapedCodeSnippet = issue.codeSnippet.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-          const escapedReason = issue.reason.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-          const escapedSuggestion = issue.suggestion.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-          const escapedFixedCodeSnippet = (issue.fixedCodeSnippet || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-
-          currentRow = currentRow.replace(/{ruleId}/g, issue.ruleId);
-          currentRow = currentRow.replace(/{ruleTitle}/g, issue.ruleTitle);
-          currentRow = currentRow.replace(/{lineNumber}/g, issue.lineNumber.toString());
-          currentRow = currentRow.replace(/{codeSnippet}/g, escapedCodeSnippet);
-          currentRow = currentRow.replace(/{reason}/g, escapedReason);
-          currentRow = currentRow.replace(/{suggestion}/g, escapedSuggestion);
-          currentRow = currentRow.replace(/{fixedCodeSnippet}/g, escapedFixedCodeSnippet);
-
+          currentRow = currentRow.replace(/{ruleId}/g, ruleResult.ruleId);
+          currentRow = currentRow.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
+          currentRow = currentRow.replace(/{lineNumber}/g, '-');
+          currentRow = currentRow.replace(/{codeSnippet}/g, '-');
+          currentRow = currentRow.replace(/{reason}/g, '✅ No issues found');
+          currentRow = currentRow.replace(/{suggestion}/g, '-');
+          currentRow = currentRow.replace(/{fixedCodeSnippet}/g, '-');
           tableRows += currentRow + '\n';
+        } else {
+          // Has issues - add rows for each issue
+          for (const issue of ruleResult.issues) {
+            let currentRow = tableRowTemplate;
+
+            // Escape pipe characters in code snippets and reason/suggestion
+            const escapedCodeSnippet = issue.codeSnippet.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+            const escapedReason = issue.reason.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+            const escapedSuggestion = issue.suggestion.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+            const escapedFixedCodeSnippet = (issue.fixedCodeSnippet || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+
+            currentRow = currentRow.replace(/{ruleId}/g, issue.ruleId);
+            currentRow = currentRow.replace(/{ruleTitle}/g, issue.ruleTitle);
+            currentRow = currentRow.replace(/{lineNumber}/g, issue.lineNumber.toString());
+            currentRow = currentRow.replace(/{codeSnippet}/g, escapedCodeSnippet);
+            currentRow = currentRow.replace(/{reason}/g, escapedReason);
+            currentRow = currentRow.replace(/{suggestion}/g, escapedSuggestion);
+            currentRow = currentRow.replace(/{fixedCodeSnippet}/g, escapedFixedCodeSnippet);
+
+            tableRows += currentRow + '\n';
+          }
         }
       }
 
-      // Only create chapter section if there are issues
+      // Create chapter section if there are any rows
       if (tableRows.trim()) {
         let currentChapterSection = tableChapterTemplate;
 
@@ -177,7 +198,7 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
 export function formatUnifiedReviewResults(results: ReviewResult[], template: string, showRulesWithNoIssues: boolean = false, outputFormat: 'normal' | 'table' = 'normal'): string {
   // Use table format if requested
   if (outputFormat === 'table') {
-    return formatUnifiedReviewResultsAsTable(results, template);
+    return formatUnifiedReviewResultsAsTable(results, template, showRulesWithNoIssues);
   }
 
   // Normal format (existing logic)

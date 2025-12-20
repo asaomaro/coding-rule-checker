@@ -225,6 +225,12 @@ More specific guidance.
   - `"normal"`: Standard hierarchical format with chapters and rules
   - `"table"`: Markdown table format with columns for chapter, line number, code, reason, suggestion, and fix
   - Template customization: Define table format in `review-results-template.md` using `TABLE_RULESET_SECTION`, `TABLE_HEADER`, and `TABLE_ROW` markers
+- `issueDetectionThreshold` (optional, default: 0.5): Threshold for detecting issues across multiple review iterations
+  - Range: 0.00 to 1.00 (supports up to 2 decimal places)
+  - `0.0`: Issue must be detected in ALL iterations (100% - strictest)
+  - `0.5`: Issue must be detected in majority of iterations (default)
+  - `1.0`: Issue must be detected at least ONCE (most lenient)
+  - This setting helps reduce false positives by requiring issues to appear consistently across multiple iterations
 - `ruleset` (required): Ruleset configuration
   - **Simple mode (string)**: Single ruleset name (e.g., `"typescript-rules"`)
   - **Advanced mode (object)**: Ruleset-to-file-patterns mapping

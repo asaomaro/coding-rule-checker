@@ -250,6 +250,9 @@ async function handleChatRequest(
       const reviewPrompt = await loadPromptTemplate(workspaceRoot, reviewPromptPath);
       const falsePositivePrompt = await loadPromptTemplate(workspaceRoot, falsePositivePromptPath);
 
+      // Get issue detection threshold from settings (default: 0.5)
+      const issueDetectionThreshold = settings.issueDetectionThreshold ?? 0.5;
+
       // Perform review
       const result = await reviewCodeParallel(
         code,
@@ -262,6 +265,7 @@ async function handleChatRequest(
         falsePositivePrompt,
         model,
         queue,
+        issueDetectionThreshold,
         (progress) => {
           stream.progress(progress.message);
         }

@@ -37,6 +37,7 @@ export async function reviewCodeParallel(
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
   queue: ConcurrencyQueue,
+  issueDetectionThreshold: number = 0.5,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult> {
   const chapterResults: ChapterReviewResult[] = [];
@@ -64,6 +65,7 @@ export async function reviewCodeParallel(
       falsePositivePromptTemplate,
       model,
       queue,
+      issueDetectionThreshold,
       undefined  // Don't pass progressCallback to individual iterations
     );
 
@@ -111,6 +113,7 @@ async function reviewChapter(
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
   queue: ConcurrencyQueue,
+  issueDetectionThreshold: number = 0.5,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ChapterReviewResult> {
   // Get iteration counts for this chapter
@@ -141,7 +144,7 @@ async function reviewChapter(
   const iterations = await Promise.all(iterationPromises);
 
   // Aggregate results from multiple iterations
-  let issues = aggregateReviewIterations(iterations);
+  let issues = aggregateReviewIterations(iterations, issueDetectionThreshold);
 
   // Perform false positive checks in parallel
   if (falsePositiveIterations > 0 && issues.length > 0) {
@@ -230,6 +233,7 @@ export async function reviewMultipleFiles(
   falsePositivePromptTemplate: string,
   model: vscode.LanguageModelChat,
   queue: ConcurrencyQueue,
+  issueDetectionThreshold: number = 0.5,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewResult[]> {
   // Process all files in parallel (queue will handle concurrency limits)
@@ -245,6 +249,7 @@ export async function reviewMultipleFiles(
       falsePositivePromptTemplate,
       model,
       queue,
+      issueDetectionThreshold,
       progressCallback
     )
   );
