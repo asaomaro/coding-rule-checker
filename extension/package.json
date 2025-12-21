@@ -1,0 +1,77 @@
+{
+  "name": "coding-rule-checker",
+  "displayName": "Coding Rule Checker",
+  "description": "A VSCode extension that performs static code analysis based on coding rules written in Markdown format",
+  "version": "0.1.0",
+  "publisher": "asaomaro",
+  "author": { 
+    "name": "s.asao"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asaomaro/coding-rule-checker"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Chat"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "coding-rule-checker",
+        "name": "coding-rule-checker",
+        "fullName": "Coding Rule Checker",
+        "description": "Reviews code based on markdown-formatted coding rules",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "review",
+            "description": "Review all code in the specified file"
+          },
+          {
+            "name": "diff",
+            "description": "Review only the diff code"
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run webpack-prod",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "webpack-prod": "webpack --mode production --devtool hidden-source-map",
+    "package": "vsce package",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "generate-icons": "node generate-png-icon.js"
+  },
+  "devDependencies": {
+    "@types/minimatch": "^5.1.2",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.54.0",
+    "sharp": "^0.34.5",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.3.0",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "markdown-it": "^14.0.0",
+    "minimatch": "^10.1.1"
+  }
+}

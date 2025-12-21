@@ -1,0 +1,21 @@
+{
+  "rulesPath": ".vscode/coding-rule-checker/java-rule/rules",
+  "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
+  "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
+  "commonPromptPath": ".vscode/coding-rule-checker/java-rule/rules/01_総則・適用範囲.md",
+  "reviewIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  },
+  "falsePositiveCheckIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  },
+  "chapterFilePatterns": {
+    "1": ["*.java", "*.ts"]
+  }
+}

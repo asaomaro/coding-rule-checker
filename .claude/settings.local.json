@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(npm run compile:*)",
+      "Bash(tree:*)",
+      "Bash(npm run package:*)",
+      "Bash(npm install:*)",
+      "Bash(node generate-png-icon.js:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebSearch",
+      "Bash(gh api:*)",
+      "Bash(cat:*)",
+      "Bash(dir:*)",
+      "Bash(git restore:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "model": "gpt-5-mini",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "maxConcurrentReviews": 20,
+  "showRulesWithNoIssues": true,
+  "outputFormat": "table",
+  "issueDetectionThreshold": 0.5,
+  "ruleset": {
+    "java-rule": ["*.java"],
+    "sample-rule": ["*.java"]
+  },
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
+  }
+}
