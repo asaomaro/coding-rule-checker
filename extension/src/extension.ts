@@ -36,25 +36,84 @@ const PARTICIPANT_ID = 'coding-rule-checker';
 let extensionContext: vscode.ExtensionContext;
 
 export function activate(context: vscode.ExtensionContext) {
+  // Initialize logger FIRST - before any try/catch
+  logger.initializeLogger('Coding Rule Checker');
+  logger.show(); // Show output immediately
+
+  logger.log('='.repeat(80));
+  logger.log('EXTENSION ACTIVATION STARTING');
+  logger.log('Extension Name: Coding Rule Checker');
+  logger.log('Extension Path:', context.extensionPath);
+  logger.log('VSCode Version:', vscode.version);
+  logger.log('='.repeat(80));
+
   extensionContext = context;
 
-  // Initialize logger
-  logger.initializeLogger('Coding Rule Checker');
-  logger.log('Extension activated');
-
-  // Register chat participant
-  const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, async (request, chatContext, stream, token) => {
-    try {
-      await handleChatRequest(request, chatContext, stream, token);
-    } catch (error) {
-      logger.error('Chat request failed:', error);
-      stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}\n\n`);
+  try {
+    // Check if chat API is available
+    logger.log('Checking Chat API availability...');
+    if (!vscode.chat) {
+      const errorMsg = 'vscode.chat API is not available. This extension requires VSCode 1.85.0+ with GitHub Copilot Chat.';
+      logger.error(errorMsg);
+      logger.log('ACTIVATION COMPLETED WITH WARNINGS (No Chat API)');
+      logger.log('='.repeat(80));
+      vscode.window.showWarningMessage(errorMsg);
+      return; // Exit gracefully
     }
-  });
 
-  participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'icon.png');
+    if (!vscode.chat.createChatParticipant) {
+      const errorMsg = 'vscode.chat.createChatParticipant is not available. Please ensure GitHub Copilot Chat is properly installed.';
+      logger.error(errorMsg);
+      logger.log('ACTIVATION COMPLETED WITH WARNINGS (No createChatParticipant)');
+      logger.log('='.repeat(80));
+      vscode.window.showWarningMessage(errorMsg);
+      return; // Exit gracefully
+    }
 
-  context.subscriptions.push(participant);
+    logger.log('✓ Chat API is available');
+    logger.log('Creating chat participant with ID:', PARTICIPANT_ID);
+
+    // Register chat participant
+    const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, async (request, chatContext, stream, token) => {
+      try {
+        logger.log('='.repeat(80));
+        logger.log('CHAT REQUEST RECEIVED');
+        logger.log('Command:', request.command);
+        logger.log('Prompt:', request.prompt);
+        logger.log('='.repeat(80));
+        await handleChatRequest(request, chatContext, stream, token);
+      } catch (error) {
+        logger.error('Chat request failed:', error);
+        stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}\n\n`);
+      }
+    });
+
+    logger.log('✓ Chat participant created');
+
+    // Set icon path
+    const iconPath = vscode.Uri.joinPath(context.extensionUri, 'icon.png');
+    participant.iconPath = iconPath;
+    logger.log('✓ Icon path set to:', iconPath.fsPath);
+
+    context.subscriptions.push(participant);
+    logger.log('✓ Chat participant registered successfully');
+    logger.log('Participant ID:', PARTICIPANT_ID);
+    logger.log('EXTENSION ACTIVATION COMPLETED SUCCESSFULLY');
+    logger.log('='.repeat(80));
+  } catch (error) {
+    const errorMessage = `Failed to activate Coding Rule Checker: ${error instanceof Error ? error.message : String(error)}`;
+    logger.error('='.repeat(80));
+    logger.error('ACTIVATION FAILED!');
+    logger.error('Error:', errorMessage);
+    if (error instanceof Error && error.stack) {
+      logger.error('Stack trace:', error.stack);
+    }
+    logger.error('='.repeat(80));
+    vscode.window.showErrorMessage(errorMessage);
+    // Don't re-throw - let activation complete
+    logger.log('ACTIVATION COMPLETED WITH ERRORS');
+    logger.log('='.repeat(80));
+  }
 }
 
 async function handleChatRequest(

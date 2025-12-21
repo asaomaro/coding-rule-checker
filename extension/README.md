@@ -1,242 +1,267 @@
-# コーディングルールチェッカー
+# コーディングルールチェッカー (VSCode拡張機能)
+
+**[重要] 本拡張機能は現在アルファ版です。予期せぬ不具合や動作の不安定さがある可能性があります。**
 
 Markdown形式で記述されたコーディングルールに基づき、静的コード解析を実行するVSCode拡張機能です。
 
-## 機能
+## 概要
+
+コーディングルールチェッカーは、カスタムのコーディングルールをMarkdown形式で定義し、AIを使用してこれらのルールに対してコードを自動的にレビューすることができます。
+VSCodeのLanguage Model APIを活用し、Copilot Chatからコードレビューを簡単かつ効率的に行えます。
+
+## 主な機能
 
 - **カスタムルールによるレビュー**: Markdownで記述されたコーディングルールに対してコードをレビュー
 - **GitHub Copilot Chat連携**: VSCodeのCopilot Chatとシームレスに統合
-- **複数ソース対応**: ローカルファイル、Git差分、GitHubリポジトリをサポート
+- **マルチソース対応**: ローカルファイル、Git差分、GitHubリポジトリをサポート
+- **複数ファイル・フォルダ対応**: 複数のターゲットを一度のコマンドでレビュー
 - **複数ルールセット対応**: ファイルパターンに応じて異なるルールセットを適用
 - **高速並列処理**: ファイル、ルールセット、章、イテレーションを並列実行
-- **重複除外**: 同一ルール・同一行番号の重複指摘を自動除外
 - **偽陽性フィルタリング**:
-  - 設定可能なしきい値による偽陽性除外
-  - 複数回のレビューで一貫して検出される指摘のみを採用
-  - 偽陽性チェックによる誤検知の削減
+    - 設定可能なしきい値による偽陽性除外
+    - 複数回のレビューで一貫して検出される指摘のみを採用
+    - 偽陽性チェックによる誤検知の削減
 - **柔軟な出力形式**:
-  - 通常形式（階層構造）と表形式をサポート
-  - カスタマイズ可能なMarkdownテンプレート
+    - 通常形式（階層構造）と表形式をサポート
+    - カスタマイズ可能なMarkdownテンプレート
 - **章別フィルタリング**: ファイルパターンに応じて特定の章のみをレビュー
 - **レビュー結果の保存**: 結果をMarkdownファイルとして保存
+
+## 要件
+
+- VSCode 1.85.0 以上
+- GitHub Copilot サブスクリプション
+- `gh` CLI (GitHub連携機能を使用する場合)
 
 ## インストール
 
 ### VSIXファイルから
 
-1. `.vsix`ファイルをダウンロードまたはビルドします
+1. `.vsix`ファイルを[リリースページ](https://github.com/asaomaro/coding-rule-checker/releases)からダウンロード、または[開発ガイド](../../README.md)に従ってビルドします
 2. VSCodeを開きます
 3. 拡張機能ビューに移動します (`Ctrl+Shift+X`)
 4. 「...」メニューをクリックし、「VSIXからのインストール...」を選択します
 5. ダウンロードした`.vsix`ファイルを選択します
 
-### ソースからビルド
+## コマンドリファレンス
 
-1. リポジトリをクローンします
-2. extensionフォルダで `npm install` を実行します
-3. `npm run compile` を実行してビルドします
-4. `F5`キーを押して拡張機能開発ホストを起動します
+### `/review` - コードのレビュー
 
-### 要件
+コーディングルールに対してファイル全体またはフォルダ全体をレビューします。
 
-- VSCode 1.85.0 以上
-- GitHub Copilot サブスクリプション
-- Node.js 20+ (ソースからビルドする場合)
+**構文:**
+```
+/review [--ruleset=<rulesets>] <target>...
+/review [-r <rulesets>] <target>...
+```
+
+**ターゲット:**
+- `#file` - VSCodeファイル参照（UIで選択）
+- `#file:filename` - ファイル名パターンによるファイル
+- `#folder` - VSCodeフォルダ参照（UIで選択）
+- `#folder:foldername` - フォルダ名パターンによるフォルダ
+- `https://github.com/...` - GitHubファイルURL
+- `./path/to/file.ts` - 明示的なパス（拡張子付き）
+
+**オプション:**
+- `--ruleset=name` or `-r name` - ルールセットを上書き（複数指定の場合はカンマ区切り）
+
+### `/diff` - Diffのレビュー
+
+git diffの変更されたコードのみをレビューします。
+
+**構文:**
+```
+/diff [range] [#file]
+```
+
+**範囲の例:**
+- `/diff` - コミットされていない変更をレビュー
+- `/diff main..feature` - ブランチ間のdiffをレビュー
+- `/diff v1.0.0..v2.0.0` - タグ間のdiffをレビュー
+- `/diff https://github.com/owner/repo/compare/main...feature` - GitHub上のdiffをレビュー
+
+## 使用例
+
+### 基本的なファイルレビュー
+
+```bash
+# VSCodeファイル参照を使用したレビュー
+@coding-rule-checker /review #file
+
+# ファイル名パターンによるレビュー
+@coding-rule-checker /review #file:UserService.java
+
+# 複数ファイルを名前でレビュー
+@coding-rule-checker /review #file:UserService.java #file:OrderController.java
+```
+
+### フォルダレビュー
+
+```bash
+# フォルダ全体を再帰的にレビュー
+@coding-rule-checker /review #folder
+
+# フォルダを名前でレビュー
+@coding-rule-checker /review #folder:src/components
+```
+
+### ルールセットの上書き
+
+```bash
+# 特定のルールセットを使用（自動検出を上書き）
+@coding-rule-checker /review --ruleset=typescript-rules #file
+
+# 複数のルールセットを使用
+@coding-rule-checker /review -r typescript-rules,security-rules #file
+```
+
+### Git Diff レビュー
+
+```bash
+# ブランチ間のdiffをレビュー
+@coding-rule-checker /diff main..feature
+
+# 特定のファイルのdiffをレビュー
+@coding-rule-checker /diff main..feature #file
+
+# コミットされていない変更をレビュー
+@coding-rule-checker /diff
+```
+
+### GitHub連携
+
+```bash
+# 単一のGitHubファイルをレビュー
+@coding-rule-checker /review https://github.com/owner/repo/blob/main/src/app.ts
+
+# GitHubのdiffをレビュー
+@coding-rule-checker /diff https://github.com/owner/repo/compare/main...feature
+```
 
 ## 設定
 
-### 1. 設定ディレクトリの作成
+この拡張機能は、ワークスペースの`.vscode/coding-rule-checker`ディレクトリにある設定ファイル群によって制御されます。
 
-ワークスペースに `.vscode/coding-rule-checker` ディレクトリを作成します。
+### 1. `settings.json`
 
-### 2. settings.jsonの作成
+メインの設定ファイルです。
 
 **パターン1: 単一ルールセット（シンプルモード）**
 ```json
 {
-  "model": "copilot-gpt-4",
+  "model": "gpt-4-turbo",
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
-  "maxConcurrentReviews": 10,
-  "showRulesWithNoIssues": false,
-  "ruleset": "typescript-rules",
-  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
-  "fileOutput": {
-    "enabled": true,
-    "outputDir": ".vscode/coding-rule-checker/review-results",
-    "outputFileName": "reviewed_{originalFileName}.md"
-  }
+  "ruleset": "typescript-rules"
 }
 ```
 
-**パターン2: 複数ルールセットとファイルパターンマッチング（アドバンスモード）**
+**パターン2: 複数ルールセット（アドバンスモード）**
 ```json
 {
-  "model": "copilot-gpt-4",
-  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
-  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
-  "maxConcurrentReviews": 10,
-  "showRulesWithNoIssues": false,
+  "model": "gpt-4-turbo",
   "ruleset": {
     "common": ["*.java", "*.html"],
-    "app-rule": ["common/*.java", "component*.java", "*.sql"],
+    "app-rule": ["common/*.java", "component*.java"],
     "web-rule": ["*.html", "*.css"]
-  },
-  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
-  "fileOutput": {
-    "enabled": true,
-    "outputDir": ".vscode/coding-rule-checker/review-results",
-    "outputFileName": "reviewed_{originalFileName}.md"
   }
 }
 ```
 
 #### 設定項目の説明
 
-**必須項目:**
-- `model`: 使用するLLMモデル（例: "copilot-gpt-4", "gpt-5-mini"）
-- `systemPromptPath`: システムプロンプトファイルのパス
-- `summaryPromptPath`: サマリープロンプトファイルのパス
-- `templatesPath`: レビュー結果テンプレートファイルのパス
-- `ruleset`: ルールセット設定
-  - **シンプルモード（文字列）**: 単一のルールセット名（例: `"typescript-rules"`）
-  - **アドバンスモード（オブジェクト）**: ルールセット名とファイルパターンのマッピング
-    - キー: ルールセット名（例: `"common"`, `"app-rule"`）
-    - 値: ファイルパターンの配列（Glob形式）
-    - 複数のパターンにマッチするファイルは、マッチした全てのルールセットでレビューされます
-    - 例: `"common/*.java"` は `common` ディレクトリ配下の全Javaファイルにマッチ
+- `model` (必須): 使用するLLMモデル（例: "copilot-gpt-4", "gpt-5-mini"）。有料モデルを利用する場合、レビューの反復回数や並列実行数によっては、大量のプレミアムリクエストを消費する可能性があるためご注意ください。
+- `systemPromptPath` (必須): システムプロンプトファイルのパス
+- `summaryPromptPath` (必須): サマリープロンプトファイルのパス
+- `templatesPath` (必須): レビュー結果テンプレートファイルのパス
+- `ruleset` (必須): ルールセット設定
+    - **シンプルモード（文字列）**: 単一のルールセット名
+    - **アドバンスモード（オブジェクト）**: ルールセット名とファイルパターンのマッピング
 - `fileOutput`: ファイル出力設定
-  - `enabled`: ファイル出力の有効/無効
-  - `outputDir`: 出力ディレクトリ
-  - `outputFileName`: 出力ファイル名パターン
+- `maxConcurrentReviews` (オプション, デフォルト: 10): 最大並列実行数
+- `showRulesWithNoIssues` (オプション, デフォルト: false): 指摘がないルールも表示するか
+- `outputFormat` (オプション, デフォルト: `"normal"`): レビュー結果の出力形式。
+    - `"normal"`: 章とルールごとに階層的に結果を出力します。
+        ```markdown
+        ## Review Results: java-rule
 
-**オプション項目:**
-- `maxConcurrentReviews` (デフォルト: 10): 同時実行する最大LLMリクエスト数
-  - 推奨値: 5-20（APIプランに応じて調整）
-  - 高い値 = 速いレビュー、ただしAPIレート制限のリスク
-  - 低い値 = 遅いレビュー、ただし安定
-- `showRulesWithNoIssues` (デフォルト: false): 指摘がないルール項番も表示するかどうか
-- `outputFormat` (デフォルト: "normal"): レビュー結果の出力形式
-  - `"normal"`: 通常の階層形式（章・ルール単位）
-  - `"table"`: 表形式（章番号、行番号、コード、理由、修正案、修正例をカラムで表示）
-  - テンプレートカスタマイズ: `review-results-template.md` で `TABLE_RULESET_SECTION`, `TABLE_HEADER`, `TABLE_ROW` マーカーを使用して定義
-- `issueDetectionThreshold` (デフォルト: 0.5): 複数回のレビューイテレーションでの指摘検出しきい値
-  - 範囲: 0.00 ～ 1.00（小数点第2位まで指定可能）
-  - `0.0`: すべてのイテレーションで検出された指摘のみ採用（最も厳格）
-  - `0.5`: 過半数のイテレーションで検出された指摘を採用（デフォルト）
-  - `1.0`: 1回でも検出された指摘を採用（最も寛容）
-  - 偽陽性（誤検知）を減らすため、複数回のレビューで一貫して検出される指摘のみを採用する設定
+        ### 2. ファイル構成・パッケージ宣言・import の扱い
+        #### 2.3 import の扱い
 
-#### ruleset（アドバンスモード）の詳細な設定例
+        - NG1 : 7
+            - NGコードスニペット:
+                ``` text
+                import java.math.BigDecimal;
+                import java.util.ArrayList;
+                import java.util.List;
+                import rpgtospa.common.validation.bldto.ErrorDataBlDto;
+                import lombok.Data;
+                import lombok.EqualsAndHashCode;
+                ```
+            - NG理由:
+                import の並び順規約（java.* → javax.* → 外部ライブラリ → 自作パッケージ）に違反しています。自作パッケージの import (rpgtospa...) が外部ライブラリの lombok import より前に配置されています。
+            - 修正案:
+                外部ライブラリ（lombok）の import を自作パッケージの import より前に移動して、規約に従った順序に並べてください。
+            - 修正例:
+                ``` text
+                import java.math.BigDecimal;
+                import java.util.ArrayList;
+                import java.util.List;
+                import lombok.Data;
+                import lombok.EqualsAndHashCode;
+                import rpgtospa.common.validation.bldto.ErrorDataBlDto;
+                ```
+        ```
+    - `"table"`: 結果を表形式で出力します。各章のルール指摘が表としてまとめられます。
+        ```markdown
+        ## Review Results: java-rule
 
-**例1: 共通ルールと特定ファイル向けルールを組み合わせる**
-```json
-{
-  "ruleset": {
-    "common": ["*.java", "*.html"],
-    "backend-rule": ["src/main/**/*.java", "*.sql"],
-    "frontend-rule": ["src/web/**/*.html", "*.css", "*.js"]
-  }
-}
-```
-- `common/*.java` ファイルは `common` と `backend-rule` の両方でレビューされます
-- `src/web/index.html` ファイルは `common` と `frontend-rule` の両方でレビューされます
+        ### 2. ファイル構成・パッケージ宣言・import の扱い
 
-**例2: ファイル種類ごとに異なるルールセット**
-```json
-{
-  "ruleset": {
-    "java-rule": ["*.java"],
-    "sql-rule": ["*.sql"],
-    "web-rule": ["*.html", "*.css", "*.js"]
-  }
-}
-```
-- 各ファイルタイプは対応するルールセットでのみレビューされます
+        | 項番 | 項番タイトル | 行番号 | NGコード | NG理由 | 修正案 | 修正例 |
+        |:---|:---|:---|:---|:---|:---|:---|
+        | 2.3 | import の扱い | 7 | import java.math.BigDecimal;<br>import java.util.ArrayList;<br>import java.util.List;<br><br>import rpgtospa.common.validation.bldto.ErrorDataBlDto;<br>import lombok.Data;<br>import lombok.EqualsAndHashCode; | インポートの並び順規約（java.* → javax.* → 外部ライブラリ → 自作パッケージ）に違反しています。自作パッケージの import (rpgtospa.common.validation.bldto.ErrorDataBlDto) が外部ライブラリの lombok より前に配置されています（行7 が問題の開始位置）。 | 外部ライブラリ（lombok）を自作パッケージより前に並べ替えてください。グルーピングごとに空行を入れると可読性が向上します。 | package rpgtospa.common.exception;<br><br>import java.math.BigDecimal;<br>import java.util.ArrayList;<br>import java.util.List;<br><br>import lombok.Data;<br>import lombok.EqualsAndHashCode;<br><br>import rpgtospa.common.validation.bldto.ErrorDataBlDto; |
+        ```
+- `issueDetectionThreshold` (オプション, デフォルト: 0.5): 偽陽性判定のしきい値 (0.0 - 1.0)
 
-### 3. プロンプトテンプレートの作成
+### 2. `rule-settings.json`
 
-- `system-prompt.md`: AIレビュアー向けのシステムプロンプト
-- `review-prompt.md`: レビューリクエスト用のテンプレート
-- `false-positive-prompt.md`: 偽陽性チェック用のテンプレート
-- `summary-prompt.md`: レビューサマリー用のテンプレート
-
-### 4. ルール設定の作成
-
-各ルールセットに対して `rule-settings.json` を作成します:
+各ルールセット固有の設定ファイルです。
 
 ```json
 {
   "rulesPath": ".vscode/coding-rule-checker/sample-rule/rules",
-  "templatesPath": ".vscode/coding-rule-checker/sample-rule/review-results-template.md",
-  "reviewIterations": {
-    "default": 2,
-    "chapter": {
-      "1": 3
-    }
-  },
-  "falsePositiveCheckIterations": {
-    "default": 2
-  },
+  "reviewIterations": { "default": 2 },
+  "falsePositiveCheckIterations": { "default": 2 },
   "chapterFilePatterns": {
     "1": ["*.component.ts", "*.service.ts"],
-    "3": ["*.test.ts", "*.spec.ts"]
+    "3": ["*.test.ts"]
   }
 }
 ```
 
-**設定項目の説明:**
-- `rulesPath` (必須): ルールファイルが格納されているディレクトリのパス
-- `templatesPath` (オプション): レビュー結果テンプレートのパス
-- `reviewIterations`: レビューの反復回数設定
-- `falsePositiveCheckIterations`: 偽陽性チェックの反復回数設定
-- `chapterFilePatterns` (オプション): **章番号とファイルパターンのマッピング**
-  - キー: 章番号（例: "1", "2", "3"）
-  - 値: ファイルパターンの配列
-  - **重要**:
-    - 章番号が**設定されていない**章 → **すべてのファイル**でレビュー
-    - 章番号が**設定されている**章 → **パターンに一致するファイル**のみでレビュー
-  - ファイルパターンはGlob形式をサポート（例: `*.component.ts`, `util/**/*.ts`）
+- `rulesPath` (必須): ルールファイル（Markdown）が格納されたディレクトリ
+- `reviewPromptPath` (オプション): レビュー実行時に使用するプロンプトファイルのパス
+- `falsePositivePromptPath` (オプション): 偽陽性チェック時に使用するプロンプトファイルのパス
+- `commonPromptPath` (オプション): 全てのレビューで共通して使用される追加プロンプトファイルのパス（例：総則など）。ここに指定したファイルは、`rulesPath`ディレクトリ内に存在していても、レビュー対象からは除外されます。
+- `reviewIterations`: レビューの反復回数
+- `falsePositiveCheckIterations`: 偽陽性チェックの反復回数
+- `chapterFilePatterns` (オプション): 章ごとにレビュー対象ファイルを限定
 
-#### chapterFilePatterns の詳細な設定例
+### 3. プロンプトとルール
 
-**例1: UIコンポーネントとテストで異なる章をレビュー**
-```json
-{
-  "chapterFilePatterns": {
-    "1": ["*.component.ts", "*.service.ts"],
-    "2": [],
-    "3": ["*.test.ts", "*.spec.ts"],
-    "4": ["util/**/*.ts", "helper/**/*.ts"]
-  }
-}
-```
-- **章1**: `*.component.ts`と`*.service.ts`のみレビュー
-- **章2**: 設定なし（空配列） → すべてのファイルでレビュー
-- **章3**: テストファイル(`*.test.ts`, `*.spec.ts`)のみレビュー
-- **章4**: utilとhelperディレクトリ配下のファイルのみレビュー
-- **章5以降**: 設定なし → すべてのファイルでレビュー
+- **プロンプトテンプレート**: `system-prompt.md` など、AIへの指示を記述します。
+- **コーディングルール**: `rulesPath`に指定したディレクトリに、章ごとにMarkdownファイルとして記述します。
 
-**例2: 特定の章だけ特定のファイルに限定**
-```json
-{
-  "chapterFilePatterns": {
-    "1": ["*Controller.java", "*Service.java"]
-  }
-}
-```
-- **章1**: ControllerとServiceクラスのみレビュー
-- **章2以降**: 設定なし → すべてのJavaファイルでレビュー
+コーディングルールは、以下のガイドラインに従ってMarkdownファイルとして記述します。
 
-**Globパターンの例:**
-- `*.component.ts` - 任意のディレクトリの `xxx.component.ts` にマッチ
-- `src/*.ts` - `src` 直下の `.ts` ファイルにマッチ
-- `src/**/*.ts` - `src` 配下の全ての `.ts` ファイルにマッチ（ネスト含む）
-- `**/*.test.ts` - 全ディレクトリの `xxx.test.ts` にマッチ
+- **小単位での分割**: 各ルールセットは、複数のMarkdownファイルに分割して定義することを推奨します。これにより、ルールの管理と再利用が容易になります。
+- **章の定義**: 章のヘッダーは `##` (H2) を使用して定義します。例: `## 1. コード品質ルール`
+- **ルールの定義**: 各ルールのヘッダーは `###` (H3) 以降の階層（`###`, `####` など）を使用して定義します。例: `### 1.1 命名規則`
+- **ファイル命名規則**: ルールファイルは `01_xxxx.md` の形式で命名する必要があります。`01`のような数字は、ルールが適用される章の番号と一致させることが推奨されます。例: `01_naming_conventions.md`
 
-### 5. コーディングルールの記述
-
-ルールディレクトリにMarkdownファイルを作成します:
+**コーディングルールの記述例:**
 
 ```markdown
 ## 1. コード品質ルール
@@ -248,65 +273,15 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 ### 1.2 関数の複雑さ
 
 関数は小さく、単一の責務に集中する必要があります。
+
+## 2. セキュリティルール
+
+### 2.1 SQLインジェクション対策
+
+ユーザー入力は、SQLクエリに直接組み込む前に必ずサニタイズまたはプレースホルダーを使用する必要があります。
 ```
 
-## 使用方法
-
-### 基本的な使用方法
-
-**特定のファイルをレビュー**
-```
-@coding-rule-checker /review #file
-```
-
-**ファイル名を指定してレビュー**
-```
-@coding-rule-checker /review #file:UserService.java
-```
-
-**複数ファイルを同時にレビュー**
-```
-@coding-rule-checker /review #file:User.java #file:Order.java #file:Product.java
-```
-
-**フォルダ内の全ファイルをレビュー**
-```
-@coding-rule-checker /review #folder
-```
-
-**特定のルールセットを指定してレビュー**
-```
-@coding-rule-checker /review --ruleset=typescript-rules #file
-```
-
-### Git差分のレビュー
-
-**コミット範囲の差分をレビュー**
-```
-@coding-rule-checker /diff main..feature
-```
-
-**特定ファイルの差分のみレビュー**
-```
-@coding-rule-checker /diff main..feature #file
-```
-
-**未コミットの変更をレビュー**
-```
-@coding-rule-checker /diff
-```
-
-### GitHubリポジトリのレビュー
-
-**GitHubのコミット範囲をレビュー**
-```
-@coding-rule-checker /diff https://github.com/owner/repo main..feature
-```
-
-**GitHubの特定ファイルをレビュー**
-```
-@coding-rule-checker /review https://github.com/owner/repo/blob/main/src/file.ts
-```
+詳細な設定方法は、各ファイルのサンプルを参照してください。
 
 ## 動作の仕組み
 
@@ -321,108 +296,8 @@ Markdown形式で記述されたコーディングルールに基づき、静的
 6. **結果集約**:
    - 複数回のイテレーション結果を集約
    - `issueDetectionThreshold`に基づいて偽陽性をフィルタリング
-   - しきい値未満の検出頻度の指摘は除外
 7. **偽陽性チェック**: 疑わしい検出結果を複数回チェックして誤検知を除外
-8. **出力生成**:
-   - 通常形式または表形式で結果を整形
-   - `showRulesWithNoIssues`設定に応じて指摘なしルールも表示
-   - Copilot Chatに表示し、オプションでMarkdownファイルに保存
-
-## 高度な機能
-
-### 複数回のレビュー反復
-
-精度を向上させるために、各章を複数回レビューすることができます。`reviewIterations`設定で章ごとに反復回数をカスタマイズ可能です。
-
-```json
-{
-  "reviewIterations": {
-    "default": 2,
-    "chapter": {
-      "1": 3,
-      "5": 4
-    }
-  }
-}
-```
-
-### 偽陽性フィルタリング
-
-**しきい値ベースのフィルタリング**:
-- `issueDetectionThreshold`設定により、複数回のレビューで一貫して検出される指摘のみを採用
-- 例: しきい値0.5、3回のレビュー → 2回以上検出された指摘のみ採用
-
-**偽陽性チェック**:
-- 検出された各指摘に対して複数回の偽陽性チェックを実行
-- `falsePositiveCheckIterations`設定でチェック回数をカスタマイズ可能
-
-### 重複除外
-
-同一ルールID・同一行番号の指摘は自動的に1つに統合されます。これにより、複数回のレビューで同じ問題が重複して報告されることを防ぎます。
-
-### 章別フィルタリング
-
-`chapterFilePatterns`を使用して、特定のファイルタイプに対してのみ特定の章をレビューできます:
-
-```json
-{
-  "chapterFilePatterns": {
-    "1": ["*Controller.java", "*Service.java"],
-    "3": ["*.test.ts", "*.spec.ts"]
-  }
-}
-```
-
-- 章1: ControllerとServiceクラスのみ
-- 章3: テストファイルのみ
-- その他の章: すべてのファイル
-
-### カスタムテンプレート
-
-Markdownテンプレートでレビュー出力形式をカスタマイズできます:
-
-**通常形式**: 階層構造で章・ルールごとに整理
-**表形式**: Markdownテーブルで一覧表示
-
-テンプレートは`review-results-template.md`で定義し、プレースホルダー（`{fileName}`, `{ruleId}`, `{lineNumber}`など）を使用します。
-
-### GitHub連携
-
-`gh` CLIを使用してGitHubリポジトリからコードを取得:
-- 特定のファイル
-- プルリクエスト
-- コミット範囲（例: `v1.0.0..v2.0.0`）
-- ブランチ比較（例: `main..feature`）
-
-### 複数ルールセット対応
-
-ファイルパターンに応じて異なるルールセットを自動的に適用:
-
-```json
-{
-  "ruleset": {
-    "java-rule": ["*.java"],
-    "web-rule": ["*.html", "*.css"],
-    "sql-rule": ["*.sql"]
-  }
-}
-```
-
-1つのファイルが複数のパターンにマッチする場合、すべてのルールセットでレビューされます。
-
-## 要件
-
-- VSCode 1.85.0 以上
-- GitHub Copilot サブスクリプション
-- `gh` CLI (GitHub連携用)
-
-## 拡張機能の設定
-
-この拡張機能は、以下の設定を提供します:
-
-- `.vscode/coding-rule-checker/` 内の設定ファイル
-- Markdown形式のカスタムルール定義
-- AIとの対話用のプロンプトテンプレート
+8. **出力生成**: Copilot Chatに表示し、オプションでMarkdownファイルに保存
 
 ## 既知の問題
 
@@ -431,31 +306,83 @@ Markdownテンプレートでレビュー出力形式をカスタマイズでき
 
 ## リリースノート
 
-### 最新版
+### 0.1.0 - ベータ版リリース
 
-追加機能:
-- 表形式出力対応（`outputFormat`設定）
-- 章ごとの階層出力
-- 設定可能な偽陽性検出しきい値（`issueDetectionThreshold`）
-- 重複指摘の自動除外
-- 表形式での`showRulesWithNoIssues`対応
-- 複数ルールセット対応
-- 章別ファイルパターンフィルタリング
-- 複数ファイル・フォルダレビュー対応
-
-### 0.1.0
-
-初期リリース。主要機能:
-- Markdownルールに基づくコードレビュー
-- Copilot Chat連携
-- ローカルおよびGitHubのサポート
-- 並列処理
-- 偽陽性検出
-
-## コントリビューション
-
-コントリビューションを歓迎します！プルリクエストを気軽にサブミットしてください。
+- 初期リリース
 
 ## ライセンス
 
 MIT
+
+## 付録: 設定例とディレクトリ構造
+
+### 1. ディレクトリ構造の例
+
+```
+.vscode/coding-rule-checker/
+├── java-rule/
+│   ├── rules/
+│   │   ├── 01_総則・適用範囲.md
+│   │   ├── ... (その他のルールファイル)
+│   └── rule-settings.json
+├── sample-rule/
+│   ├── rules/
+│   │   └── ...
+│   └── rule-settings.json
+├── false-positive-prompt.md
+├── review-prompt.md
+├── review-results-template.md
+├── settings.json
+├── summary-prompt.md
+└── system-prompt.md
+```
+
+### 2. `settings.json` の設定例
+
+```json
+{
+  "model": "gpt-5-mini",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "maxConcurrentReviews": 20,
+  "showRulesWithNoIssues": true,
+  "outputFormat": "table",
+  "issueDetectionThreshold": 0.5,
+  "ruleset": {
+    "java-rule": ["*.java"],
+    "sample-rule": ["*.java", "*.ts"]
+  },
+  "fileOutput": {
+    "enabled": true,
+    "outputDir": ".vscode/coding-rule-checker/review-results",
+    "outputFileName": "reviewed_{originalFileName}.md"
+  }
+}
+```
+
+### 3. `java-rule/rule-settings.json` の設定例
+
+```json
+{
+  "rulesPath": ".vscode/coding-rule-checker/java-rule/rules",
+  "reviewPromptPath": ".vscode/coding-rule-checker/review-prompt.md",
+  "falsePositivePromptPath": ".vscode/coding-rule-checker/false-positive-prompt.md",
+  "commonPromptPath": ".vscode/coding-rule-checker/java-rule/rules/01_総則・適用範囲.md",
+  "reviewIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  },
+  "falsePositiveCheckIterations": {
+    "default": 2,
+    "chapter": {
+      "1": 3
+    }
+  },
+  "chapterFilePatterns": {
+    "1": ["*.java", "*.ts"]
+  }
+}
+```

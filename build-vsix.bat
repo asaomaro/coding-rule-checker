@@ -27,14 +27,14 @@ if not exist "node_modules" (
 )
 
 echo.
-echo [2/3] Compiling TypeScript...
-call npm run compile
+echo [2/3] Building bundle with webpack...
+call npm run webpack-prod
 if errorlevel 1 (
-    echo ERROR: TypeScript compilation failed
+    echo ERROR: Webpack build failed
     pause
     exit /b 1
 )
-echo Compilation completed successfully.
+echo Bundle created successfully.
 
 echo.
 echo [3/3] Packaging VSIX...

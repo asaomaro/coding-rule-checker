@@ -3,14 +3,13 @@
   "displayName": "Coding Rule Checker",
   "description": "A VSCode extension that performs static code analysis based on coding rules written in Markdown format",
   "version": "0.1.0",
-  "publisher": "s-asao",
-  "author": {
-    "name": "s.asao",
-    "email": "makkuro.marori@gmail.com"
+  "publisher": "asaomaro",
+  "author": { 
+    "name": "s.asao"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sasao/coding-rule-checker"
+    "url": "https://github.com/asaomaro/coding-rule-checker"
   },
   "license": "MIT",
   "icon": "icon.png",
@@ -19,7 +18,8 @@
   },
   "categories": [
     "Linters",
-    "Programming Languages"
+    "Programming Languages",
+    "Chat"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -30,6 +30,7 @@
       {
         "id": "coding-rule-checker",
         "name": "coding-rule-checker",
+        "fullName": "Coding Rule Checker",
         "description": "Reviews code based on markdown-formatted coding rules",
         "isSticky": true,
         "commands": [
@@ -46,13 +47,14 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run webpack-prod",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "webpack-prod": "webpack --mode production --devtool hidden-source-map",
+    "package": "vsce package",
     "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
-    "generate-icons": "node generate-png-icon.js",
-    "package": "vsce package"
+    "generate-icons": "node generate-png-icon.js"
   },
   "devDependencies": {
     "@types/minimatch": "^5.1.2",
@@ -63,7 +65,10 @@
     "@vscode/vsce": "^2.22.0",
     "eslint": "^8.54.0",
     "sharp": "^0.34.5",
-    "typescript": "^5.3.0"
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.3.0",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
   },
   "dependencies": {
     "markdown-it": "^14.0.0",
