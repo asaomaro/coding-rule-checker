@@ -5,7 +5,7 @@
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
   "maxConcurrentReviews": 20,
   "showRulesWithNoIssues": true,
-  "outputFormat": "table",
+  "outputFormat": "normal",
   "issueDetectionThreshold": 0.5,
   "ruleset": {
     "java-rule": ["*.java"],

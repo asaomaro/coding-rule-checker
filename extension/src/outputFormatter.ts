@@ -106,26 +106,28 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
     for (const chapter of result.chapterResults) {
       const hasAnyIssues = chapter.ruleResults.some(rule => rule.issues.length > 0);
 
-      // Skip chapter if it has no issues and showRulesWithNoIssues is false
-      if (!showRulesWithNoIssues && !hasAnyIssues) continue;
-
       // Build table rows for this chapter
       let tableRows = '';
 
       for (const ruleResult of chapter.ruleResults) {
         if (!showRulesWithNoIssues && ruleResult.issues.length === 0) continue;
 
+        // Check if this is a chapter-level rule (no ruleTitle)
+        const isChapterLevelRule = !ruleResult.ruleTitle || ruleResult.ruleTitle.trim() === '';
+
         if (ruleResult.issues.length === 0) {
-          // No issues - add a row with "No issues found" message
-          let currentRow = tableRowTemplate;
-          currentRow = currentRow.replace(/{ruleId}/g, ruleResult.ruleId);
-          currentRow = currentRow.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
-          currentRow = currentRow.replace(/{lineNumber}/g, '-');
-          currentRow = currentRow.replace(/{codeSnippet}/g, '-');
-          currentRow = currentRow.replace(/{reason}/g, '✅ No issues found');
-          currentRow = currentRow.replace(/{suggestion}/g, '-');
-          currentRow = currentRow.replace(/{fixedCodeSnippet}/g, '-');
-          tableRows += currentRow + '\n';
+          // No issues - add a row with "No issues found" message (skip for chapter-level rules)
+          if (!isChapterLevelRule) {
+            let currentRow = tableRowTemplate;
+            currentRow = currentRow.replace(/{ruleId}/g, ruleResult.ruleId);
+            currentRow = currentRow.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
+            currentRow = currentRow.replace(/{lineNumber}/g, '-');
+            currentRow = currentRow.replace(/{codeSnippet}/g, '-');
+            currentRow = currentRow.replace(/{reason}/g, '✅ No issues found');
+            currentRow = currentRow.replace(/{suggestion}/g, '-');
+            currentRow = currentRow.replace(/{fixedCodeSnippet}/g, '-');
+            tableRows += currentRow + '\n';
+          }
         } else {
           // Has issues - add rows for each issue
           for (const issue of ruleResult.issues) {
@@ -137,8 +139,8 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
             const escapedSuggestion = issue.suggestion.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
             const escapedFixedCodeSnippet = (issue.fixedCodeSnippet || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
 
-            currentRow = currentRow.replace(/{ruleId}/g, issue.ruleId);
-            currentRow = currentRow.replace(/{ruleTitle}/g, issue.ruleTitle);
+            currentRow = currentRow.replace(/{ruleId}/g, isChapterLevelRule ? '-' : ruleResult.ruleId);
+            currentRow = currentRow.replace(/{ruleTitle}/g, isChapterLevelRule ? '-' : ruleResult.ruleTitle);
             currentRow = currentRow.replace(/{lineNumber}/g, issue.lineNumber.toString());
             currentRow = currentRow.replace(/{codeSnippet}/g, escapedCodeSnippet);
             currentRow = currentRow.replace(/{reason}/g, escapedReason);
@@ -150,14 +152,20 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
         }
       }
 
-      // Create chapter section if there are any rows
-      if (tableRows.trim()) {
-        let currentChapterSection = tableChapterTemplate;
+      // Create chapter section
+      let currentChapterSection = tableChapterTemplate;
 
-        // Replace chapter-level placeholders
-        currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
-        currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+      // Replace chapter-level placeholders
+      currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
+      currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
 
+      if (chapter.ruleResults.length === 0) {
+        // Chapter has no rules at all - display message
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- TABLE_HEADER_START -->[\s\S]*?<!-- TABLE_ROW_END -->\n*/,
+          '\n✅ No rules defined for this chapter\n'
+        );
+      } else if (tableRows.trim()) {
         // Replace table content in chapter template
         currentChapterSection = currentChapterSection.replace(
           /<!-- TABLE_HEADER_START -->[\s\S]*?<!-- TABLE_HEADER_END -->/,
@@ -166,11 +174,17 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
 
         currentChapterSection = currentChapterSection.replace(
           /<!-- TABLE_ROW_START -->[\s\S]*?<!-- TABLE_ROW_END -->/,
-          tableRows.trim()
+          tableRows.trim() + '\n'  // Keep one blank line after table
         );
-
-        chapterSections += currentChapterSection + '\n';
+      } else {
+        // No table rows (all rules had no issues) - display "No issues found"
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- TABLE_HEADER_START -->[\s\S]*?<!-- TABLE_ROW_END -->\n*/,
+          '\n✅ No issues found\n'
+        );
       }
+
+      chapterSections += currentChapterSection + '\n';
     }
 
     // Replace chapter sections in ruleset template
@@ -185,9 +199,32 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
   // Replace {rulesetResults} in main template
   output = output.replace(/{rulesetResults}/g, rulesetSections.trim());
 
-  // Remove template sections (both table and normal format templates)
-  output = output.replace(/<!-- TABLE_RULESET_SECTION_START -->[\s\S]*?<!-- TABLE_RULESET_SECTION_END -->/g, '');
-  output = output.replace(/<!-- RULESET_SECTION_START -->[\s\S]*?<!-- RULESET_SECTION_END -->/g, '');
+  // Remove template sections (both table and normal format templates) including surrounding blank lines
+  output = output.replace(/\n*<!-- TABLE_RULESET_SECTION_START -->[\s\S]*?<!-- TABLE_RULESET_SECTION_END -->\n*/g, '');
+  output = output.replace(/\n*<!-- RULESET_SECTION_START -->[\s\S]*?<!-- RULESET_SECTION_END -->\n*/g, '');
+
+  // Final cleanup: mechanically normalize all blank lines and headers
+  // Step 1: First, remove ALL blank lines (reduce any 2+ newlines to single newline)
+  output = output.replace(/(\r?\n){2,}/g, '\n');
+
+  // Step 2: Ensure blank line before header lines (# lines)
+  output = output.replace(/([^\r\n])(\r?\n)(#{1,6} )/g, '$1\n\n$3');
+
+  // Step 3: Ensure blank line after header lines
+  output = output.replace(/(#{1,6} [^\r\n]+)(\r?\n)([^\r\n#])/g, '$1\n\n$3');
+
+  // Step 4: Ensure blank line before horizontal rules (---)
+  output = output.replace(/([^\r\n])(\r?\n)(---)/g, '$1\n\n$3');
+
+  // Step 5: Ensure blank line after horizontal rules (---)
+  output = output.replace(/(---)(\r?\n)([^\r\n-])/g, '$1\n\n$3');
+
+  // Step 6: Remove all occurrences of 3+ consecutive newlines (in case steps 2-5 created them)
+  output = output.replace(/(\r?\n){3,}/g, '\n\n');
+
+  // Step 7: Remove ALL trailing whitespace and newlines at end of file, then add single newline
+  output = output.replace(/[\r\n\s]+$/g, '');
+  output = output + '\n';
 
   return output;
 }
@@ -255,6 +292,12 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
     '<!-- ISSUE_END -->'
   );
 
+  const chapterLevelIssueTemplate = extractTemplateSection(
+    chapterTemplate,
+    '<!-- CHAPTER_LEVEL_ISSUE_START -->',
+    '<!-- CHAPTER_LEVEL_ISSUE_END -->'
+  );
+
   // Build ruleset sections
   let rulesetSections = '';
 
@@ -272,33 +315,53 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
     for (const chapter of result.chapterResults) {
       const hasAnyIssues = chapter.ruleResults.some(rule => rule.issues.length > 0);
 
-      // Skip chapter if it has no issues and showRulesWithNoIssues is false
-      if (!showRulesWithNoIssues && !hasAnyIssues) continue;
-
       let currentChapterSection = chapterTemplate;
 
       // Replace chapter-level placeholders
       currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
       currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
 
-      // Build rule sections
+      // Build rule sections and chapter-level issues
       let ruleSections = '';
+      let chapterLevelIssueSections = '';
 
       for (const ruleResult of chapter.ruleResults) {
         if (!showRulesWithNoIssues && ruleResult.issues.length === 0) continue;
 
-        // Determine rule header based on level (### for level 3, #### for level 4)
-        const ruleHeader = '#'.repeat(ruleResult.level);
+        // Check if this is a chapter-level rule (no ruleTitle)
+        const isChapterLevelRule = !ruleResult.ruleTitle || ruleResult.ruleTitle.trim() === '';
+
+        // Determine rule header based on level (+1 to shift hierarchy: ### becomes ####, #### becomes #####)
+        const ruleHeader = '#'.repeat(ruleResult.level + 1);
 
         if (ruleResult.issues.length === 0) {
-          // No issues - use the NO_ISSUES template
-          let currentRuleSection = noIssuesRuleTemplate;
-          currentRuleSection = currentRuleSection.replace(/{ruleHeader}/g, ruleHeader);
-          currentRuleSection = currentRuleSection.replace(/{ruleId}/g, ruleResult.ruleId);
-          currentRuleSection = currentRuleSection.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
-          ruleSections += currentRuleSection + '\n';
+          // No issues - use the NO_ISSUES template (only for non-chapter-level rules)
+          if (!isChapterLevelRule) {
+            let currentRuleSection = noIssuesRuleTemplate;
+            currentRuleSection = currentRuleSection.replace(/{ruleHeader}/g, ruleHeader);
+            currentRuleSection = currentRuleSection.replace(/{ruleId}/g, ruleResult.ruleId);
+            currentRuleSection = currentRuleSection.replace(/{ruleTitle}/g, ruleResult.ruleTitle);
+            ruleSections += currentRuleSection + '\n\n';  // Add extra blank line between rules
+          }
+        } else if (isChapterLevelRule) {
+          // Chapter-level rule - use CHAPTER_LEVEL_ISSUE template
+          for (let i = 0; i < ruleResult.issues.length; i++) {
+            const issue = ruleResult.issues[i];
+            let currentIssueSection = chapterLevelIssueTemplate;
+
+            // Replace issue-level placeholders with indentation awareness for multi-line values
+            currentIssueSection = currentIssueSection.replace(/{issueNumber}/g, (i + 1).toString());
+            currentIssueSection = currentIssueSection.replace(/{lineNumber}/g, issue.lineNumber.toString());
+            currentIssueSection = currentIssueSection.replace(/{language}/g, 'text'); // Default, can be enhanced
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{codeSnippet}', issue.codeSnippet);
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{reason}', issue.reason);
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{suggestion}', issue.suggestion);
+            currentIssueSection = replaceWithIndent(currentIssueSection, '{fixedCodeSnippet}', issue.fixedCodeSnippet || '');
+
+            chapterLevelIssueSections += currentIssueSection + '\n';
+          }
         } else {
-          // Has issues - use the regular template
+          // Regular rule - use RULE_SECTION template
           let currentRuleSection = ruleTemplate;
 
           // Replace rule-level placeholders
@@ -331,21 +394,76 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
             issueSections.trim()
           );
 
-          ruleSections += currentRuleSection + '\n';
+          ruleSections += currentRuleSection + '\n\n';  // Add extra blank line between rules
         }
       }
 
-      // Replace rule sections in chapter template
-      currentChapterSection = currentChapterSection.replace(
-        /<!-- RULE_SECTION_START -->[\s\S]*?<!-- RULE_SECTION_END -->/,
-        ruleSections.trim()
-      );
+      // Check if chapter has any content to display
+      const hasContent = chapterLevelIssueSections.trim() || ruleSections.trim();
 
-      // Remove NO_ISSUES_RULE_SECTION template (already processed above)
-      currentChapterSection = currentChapterSection.replace(
-        /<!-- NO_ISSUES_RULE_SECTION_START -->[\s\S]*?<!-- NO_ISSUES_RULE_SECTION_END -->/g,
-        ''
-      );
+      if (chapter.ruleResults.length === 0) {
+        // Chapter has no rules at all - display message
+        currentChapterSection = currentChapterSection.replace(
+          /\n?<!-- CHAPTER_LEVEL_ISSUE_START -->[\s\S]*?<!-- CHAPTER_LEVEL_ISSUE_END -->\n*/g,
+          ''
+        );
+        currentChapterSection = currentChapterSection.replace(
+          /\n?<!-- RULE_SECTION_START -->[\s\S]*?<!-- RULE_SECTION_END -->\n*/g,
+          '\n✅ No rules defined for this chapter\n'
+        );
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- NO_ISSUES_RULE_SECTION_START -->[\s\S]*?<!-- NO_ISSUES_RULE_SECTION_END -->/g,
+          ''
+        );
+      } else if (!hasContent && !showRulesWithNoIssues) {
+        // Chapter has rules but no issues and showRulesWithNoIssues is false
+        // Display "No issues found" for this chapter
+        currentChapterSection = currentChapterSection.replace(
+          /\n?<!-- CHAPTER_LEVEL_ISSUE_START -->[\s\S]*?<!-- CHAPTER_LEVEL_ISSUE_END -->\n*/g,
+          ''
+        );
+        currentChapterSection = currentChapterSection.replace(
+          /\n?<!-- RULE_SECTION_START -->[\s\S]*?<!-- RULE_SECTION_END -->\n*/g,
+          '\n✅ No issues found\n'
+        );
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- NO_ISSUES_RULE_SECTION_START -->[\s\S]*?<!-- NO_ISSUES_RULE_SECTION_END -->/g,
+          ''
+        );
+      } else {
+        // Chapter has content or showRulesWithNoIssues is true
+        // Replace chapter-level issue sections in chapter template
+        if (chapterLevelIssueSections.trim()) {
+          currentChapterSection = currentChapterSection.replace(
+            /<!-- CHAPTER_LEVEL_ISSUE_START -->[\s\S]*?<!-- CHAPTER_LEVEL_ISSUE_END -->/g,
+            chapterLevelIssueSections.trim() + '\n'
+          );
+        } else {
+          currentChapterSection = currentChapterSection.replace(
+            /\n?<!-- CHAPTER_LEVEL_ISSUE_START -->[\s\S]*?<!-- CHAPTER_LEVEL_ISSUE_END -->\n*/g,
+            ''
+          );
+        }
+
+        // Replace rule sections in chapter template
+        if (ruleSections.trim()) {
+          currentChapterSection = currentChapterSection.replace(
+            /<!-- RULE_SECTION_START -->[\s\S]*?<!-- RULE_SECTION_END -->/g,
+            ruleSections.trim()
+          );
+        } else {
+          currentChapterSection = currentChapterSection.replace(
+            /\n?<!-- RULE_SECTION_START -->[\s\S]*?<!-- RULE_SECTION_END -->\n*/g,
+            ''
+          );
+        }
+
+        // Remove NO_ISSUES_RULE_SECTION template (already processed above)
+        currentChapterSection = currentChapterSection.replace(
+          /<!-- NO_ISSUES_RULE_SECTION_START -->[\s\S]*?<!-- NO_ISSUES_RULE_SECTION_END -->/g,
+          ''
+        );
+      }
 
       chapterSections += currentChapterSection + '\n';
     }
@@ -368,9 +486,32 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
   // Replace {rulesetResults} in main template
   output = output.replace(/{rulesetResults}/g, rulesetSections.trim());
 
-  // Remove template sections (both table and normal format templates)
-  output = output.replace(/<!-- RULESET_SECTION_START -->[\s\S]*?<!-- RULESET_SECTION_END -->/g, '');
-  output = output.replace(/<!-- TABLE_RULESET_SECTION_START -->[\s\S]*?<!-- TABLE_RULESET_SECTION_END -->/g, '');
+  // Remove template sections (both table and normal format templates) including surrounding blank lines
+  output = output.replace(/\n*<!-- RULESET_SECTION_START -->[\s\S]*?<!-- RULESET_SECTION_END -->\n*/g, '');
+  output = output.replace(/\n*<!-- TABLE_RULESET_SECTION_START -->[\s\S]*?<!-- TABLE_RULESET_SECTION_END -->\n*/g, '');
+
+  // Final cleanup: mechanically normalize all blank lines and headers
+  // Step 1: First, remove ALL blank lines (reduce any 2+ newlines to single newline)
+  output = output.replace(/(\r?\n){2,}/g, '\n');
+
+  // Step 2: Ensure blank line before header lines (# lines)
+  output = output.replace(/([^\r\n])(\r?\n)(#{1,6} )/g, '$1\n\n$3');
+
+  // Step 3: Ensure blank line after header lines
+  output = output.replace(/(#{1,6} [^\r\n]+)(\r?\n)([^\r\n#])/g, '$1\n\n$3');
+
+  // Step 4: Ensure blank line before horizontal rules (---)
+  output = output.replace(/([^\r\n])(\r?\n)(---)/g, '$1\n\n$3');
+
+  // Step 5: Ensure blank line after horizontal rules (---)
+  output = output.replace(/(---)(\r?\n)([^\r\n-])/g, '$1\n\n$3');
+
+  // Step 6: Remove all occurrences of 3+ consecutive newlines (in case steps 2-5 created them)
+  output = output.replace(/(\r?\n){3,}/g, '\n\n');
+
+  // Step 7: Remove ALL trailing whitespace and newlines at end of file, then add single newline
+  output = output.replace(/[\r\n\s]+$/g, '');
+  output = output + '\n';
 
   return output;
 }
@@ -397,7 +538,8 @@ export async function saveUnifiedReviewResults(
 
   // Generate output file name
   const firstResult = results[0];
-  const originalFileName = path.basename(firstResult.fileName, path.extname(firstResult.fileName));
+  // Use fileName as-is (already includes extension, e.g., "UserService.java")
+  const originalFileName = firstResult.fileName;
   const outputFileName = settings.fileOutput.outputFileName.replace(
     '{originalFileName}',
     originalFileName

@@ -129,6 +129,12 @@ async function handleChatRequest(
   const queue = new ConcurrencyQueue(maxConcurrent);
   stream.markdown(`⚙️ Max concurrent reviews: ${maxConcurrent}\n`);
 
+  // Display output format and issue detection threshold
+  const outputFormat = settings.outputFormat || 'normal';
+  const issueDetectionThreshold = settings.issueDetectionThreshold ?? 0.5;
+  stream.markdown(`📊 Output format: ${outputFormat}\n`);
+  stream.markdown(`🎯 Issue detection threshold: ${issueDetectionThreshold}\n`);
+
   // Get code to review
   stream.markdown('📥 Retrieving code...\n');
   const codesToReview = await getCodeToReview(reviewRequest, workspaceRoot);
@@ -250,9 +256,6 @@ async function handleChatRequest(
       const reviewPrompt = await loadPromptTemplate(workspaceRoot, reviewPromptPath);
       const falsePositivePrompt = await loadPromptTemplate(workspaceRoot, falsePositivePromptPath);
 
-      // Get issue detection threshold from settings (default: 0.5)
-      const issueDetectionThreshold = settings.issueDetectionThreshold ?? 0.5;
-
       // Perform review
       const result = await reviewCodeParallel(
         code,
@@ -303,7 +306,8 @@ async function handleChatRequest(
         logger.log('Attempting to save unified review results...');
         const outputPath = await saveUnifiedReviewResults(validResults, settings, workspaceRoot, template);
         logger.log('Review results saved successfully to:', outputPath);
-        stream.markdown(`\n💾 Review results saved to: [${path.basename(outputPath)}](${vscode.Uri.file(outputPath)})\n`);
+        const fileUri = vscode.Uri.file(outputPath).toString();
+        stream.markdown(`\n💾 Review results saved to: [${path.basename(outputPath)}](${fileUri})\n`);
       } catch (error) {
         logger.error('Failed to save review results:', error);
         stream.markdown(`\n⚠️ Failed to save review results: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -318,7 +322,6 @@ async function handleChatRequest(
 
     // Show detailed results
     stream.markdown('\n---\n\n## 📋 Detailed Results\n\n');
-    const outputFormat = settings.outputFormat || 'normal';
     stream.markdown(formatUnifiedReviewResults(validResults, template, showRulesWithNoIssues, outputFormat));
   }
 
