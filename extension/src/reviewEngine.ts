@@ -412,7 +412,11 @@ export function aggregateReviewIterations(iterations: ReviewIteration[], detecti
   for (const [, issue] of issueMap) {
     if (issue.count >= requiredCount) {
       const { count, ...issueWithoutCount } = issue;
-      aggregatedIssues.push(issueWithoutCount);
+      // Include detectionCount in the final issue
+      aggregatedIssues.push({
+        ...issueWithoutCount,
+        detectionCount: count
+      });
     }
   }
 

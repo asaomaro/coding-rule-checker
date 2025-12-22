@@ -38,7 +38,6 @@ let extensionContext: vscode.ExtensionContext;
 export function activate(context: vscode.ExtensionContext) {
   // Initialize logger FIRST - before any try/catch
   logger.initializeLogger('Coding Rule Checker');
-  logger.show(); // Show output immediately
 
   logger.log('='.repeat(80));
   logger.log('EXTENSION ACTIVATION STARTING');
@@ -166,19 +165,25 @@ async function handleChatRequest(
   const settings = await loadSettings(workspaceRoot);
 
   // Get language model
-  const models = await vscode.lm.selectChatModels({ family: settings.model });
+  const models = settings.model
+    ? await vscode.lm.selectChatModels({ family: settings.model })
+    : await vscode.lm.selectChatModels();
   if (models.length === 0) {
     // List all available models for debugging
     const allModels = await vscode.lm.selectChatModels();
     const availableModels = allModels.map(m => `${m.family} (${m.name})`).join(', ');
-    throw new Error(
-      `No language model found for: ${settings.model}\n\n` +
-      `Available models: ${availableModels || 'None'}\n\n` +
-      `Please update the "model" field in .vscode/coding-rule-checker/settings.json to use one of the available model families.`
-    );
+    const errorMessage = settings.model
+      ? `No language model found for: ${settings.model}\n\n` +
+        `Available models: ${availableModels || 'None'}\n\n` +
+        `Please update the "model" field in .vscode/coding-rule-checker/settings.json to use one of the available model families.`
+      : `No language model found.\n\n` +
+        `Available models: ${availableModels || 'None'}\n\n` +
+        `Please ensure you have a language model installed or specify a model in .vscode/coding-rule-checker/settings.json.`;
+    throw new Error(errorMessage);
   }
   const model = models[0];
-  stream.markdown(`🤖 Using model: ${model.name} (${model.family})\n`);
+  const modelSource = settings.model ? `specified: ${model.name} (${model.family})` : `default: ${model.name} (${model.family})`;
+  stream.markdown(`🤖 Using model (${modelSource})\n`);
 
   // Load system prompt
   const systemPrompt = await loadPromptTemplate(workspaceRoot, settings.systemPromptPath);

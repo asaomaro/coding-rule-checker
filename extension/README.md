@@ -43,6 +43,194 @@ VSCodeのLanguage Model APIを活用し、Copilot Chatからコードレビュ�
 4. 「...」メニューをクリックし、「VSIXからのインストール...」を選択します
 5. ダウンロードした`.vsix`ファイルを選択します
 
+## 初期セットアップ
+
+拡張機能を利用可能にするまでの手順を説明します。
+
+### ステップ1: 必須ファイルのダウンロード
+
+以下の5つのマークダウンファイルを必ずダウンロードし、`.vscode/coding-rule-checker/`ディレクトリに配置してください。
+
+**必須ファイル:**
+1. `review-results-template.md` - レビュー結果の出力テンプレート
+2. `system-prompt.md` - システムプロンプト
+3. `review-prompt.md` - レビュー実行時のプロンプト
+4. `false-positive-prompt.md` - 偽陽性チェック用プロンプト
+5. `summary-prompt.md` - サマリー生成用プロンプト
+
+**ダウンロード方法:**
+1. [リリースページ](https://github.com/asaomaro/coding-rule-checker/releases)にアクセス
+2. 最新リリースから上記のファイルをダウンロード
+3. プロジェクトルートに `.vscode/coding-rule-checker/` ディレクトリを作成
+4. ダウンロードしたファイルを配置
+
+### ステップ2: settings.json の作成
+
+`.vscode/coding-rule-checker/settings.json` を作成し、基本設定を記述します。
+
+**最小構成の例（単一ルールセット）:**
+```json
+{
+  "model": "gpt-4-turbo",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "ruleset": "my-rules"
+}
+```
+
+**複数ルールセットの例:**
+```json
+{
+  "model": "gpt-4-turbo",
+  "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
+  "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
+  "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
+  "ruleset": {
+    "java-rules": ["*.java"],
+    "typescript-rules": ["*.ts", "*.tsx"]
+  }
+}
+```
+
+### ステップ3: ルールセットフォルダの作成
+
+`settings.json` で指定したルールセット名に対応するフォルダを作成します。
+
+**単一ルールセットの場合:**
+```
+.vscode/coding-rule-checker/
+└── my-rules/          # settings.jsonのruleset名と一致
+```
+
+**複数ルールセットの場合:**
+```
+.vscode/coding-rule-checker/
+├── java-rules/        # settings.jsonのruleset名と一致
+└── typescript-rules/  # settings.jsonのruleset名と一致
+```
+
+### ステップ4: rule-settings.json の作成
+
+各ルールセットフォルダ内に `rule-settings.json` を作成します。
+
+**例: `.vscode/coding-rule-checker/my-rules/rule-settings.json`**
+```json
+{
+  "rulesPath": ".vscode/coding-rule-checker/my-rules/rules",
+  "reviewIterations": {
+    "default": 2
+  },
+  "falsePositiveCheckIterations": {
+    "default": 2
+  }
+}
+```
+
+**設定項目の説明:**
+- `rulesPath`: ルールファイルが格納されるディレクトリパス（必須）
+- `reviewIterations`: レビューの反復回数（推奨: 2-3回）
+- `falsePositiveCheckIterations`: 偽陽性チェックの反復回数（推奨: 2回）
+- `commonPromptPath`: 全レビューで共通のプロンプト（オプション）
+- `chapterFilePatterns`: 特定の章を特定のファイルパターンにのみ適用（オプション）
+
+### ステップ5: rulesフォルダとルールファイルの作成
+
+各ルールセットフォルダ内に `rules` フォルダを作成し、章単位で分割したルールMarkdownファイルを配置します。
+
+**ディレクトリ構造:**
+```
+.vscode/coding-rule-checker/
+└── my-rules/
+    ├── rule-settings.json
+    └── rules/
+        ├── 01_naming-conventions.md    # 第1章: 命名規則
+        ├── 02_code-structure.md        # 第2章: コード構造
+        └── 03_error-handling.md        # 第3章: エラー処理
+```
+
+**ルールファイルの記述例 (`01_naming-conventions.md`):**
+```markdown
+## 1. 命名規則
+
+### 1.1 変数名
+変数名は意味が明確で、camelCaseを使用すること。
+
+#### 1.1.1 ローカル変数
+ローカル変数は小文字で始めること。
+
+### 1.2 関数名
+関数名は動詞で始め、何をするかが明確であること。
+
+## 2. コメント規則
+
+### 2.1 関数コメント
+すべての公開関数には JSDoc コメントを記述すること。
+```
+
+**ルールファイルの記述ルール:**
+- `##` (H2): 章の区切り（各章は独立してレビューされます）
+- `###` (H3): 個別のルール
+- `####` (H4): サブルール（詳細なガイドライン）
+- ファイル名は `01_xxxx.md` の形式（数字は章番号と一致させることを推奨）
+
+### ステップ6: 完成後のディレクトリ構造
+
+すべてのセットアップが完了すると、以下のような構造になります。
+
+**単一ルールセットの場合:**
+```
+.vscode/coding-rule-checker/
+├── my-rules/
+│   ├── rule-settings.json
+│   └── rules/
+│       ├── 01_naming-conventions.md
+│       ├── 02_code-structure.md
+│       └── 03_error-handling.md
+├── review-results-template.md
+├── system-prompt.md
+├── review-prompt.md
+├── false-positive-prompt.md
+├── summary-prompt.md
+└── settings.json
+```
+
+**複数ルールセットの場合:**
+```
+.vscode/coding-rule-checker/
+├── java-rules/
+│   ├── rule-settings.json
+│   └── rules/
+│       ├── 01_class-structure.md
+│       └── 02_naming.md
+├── typescript-rules/
+│   ├── rule-settings.json
+│   └── rules/
+│       ├── 01_types.md
+│       └── 02_async.md
+├── review-results-template.md
+├── system-prompt.md
+├── review-prompt.md
+├── false-positive-prompt.md
+├── summary-prompt.md
+└── settings.json
+```
+
+### ステップ7: 動作確認
+
+1. VSCodeでプロジェクトを開く
+2. GitHub Copilot Chatを開く
+3. 以下のコマンドでテストレビューを実行:
+   ```
+   @coding-rule-checker /review #file
+   ```
+4. レビュー結果が表示されれば、セットアップ完了です
+
+**トラブルシューティング:**
+- エラーが発生する場合は、`settings.json` のパスが正しいか確認してください
+- ルールセット名が `settings.json` とフォルダ名で一致しているか確認してください
+- すべての必須ファイル（5つのマークダウン）が配置されているか確認してください
+
 ## コマンドリファレンス
 
 ### `/review` - コードのレビュー
@@ -171,7 +359,7 @@ git diffの変更されたコードのみをレビューします。
 
 #### 設定項目の説明
 
-- `model` (必須): 使用するLLMモデル（例: "copilot-gpt-4", "gpt-5-mini"）。有料モデルを利用する場合、レビューの反復回数や並列実行数によっては、大量のプレミアムリクエストを消費する可能性があるためご注意ください。
+- `model` 使用するLLMモデル（例: "copilot-gpt-4", "gpt-5-mini"）。有料モデルを利用する場合、レビューの反復回数や並列実行数によっては、大量のプレミアムリクエストを消費する可能性があるためご注意ください。未指定の場合は選択中のモデルが使用されます。
 - `systemPromptPath` (必須): システムプロンプトファイルのパス
 - `summaryPromptPath` (必須): サマリープロンプトファイルのパス
 - `templatesPath` (必須): レビュー結果テンプレートファイルのパス
@@ -187,9 +375,10 @@ git diffの変更されたコードのみをレビューします。
         ## Review Results: java-rule
 
         ### 2. ファイル構成・パッケージ宣言・import の扱い
+
         #### 2.3 import の扱い
 
-        - NG1 : 7
+        - NG1 : 7 (検出回数: 2/3 (66.7%))
             - NGコードスニペット:
                 ``` text
                 import java.math.BigDecimal;
@@ -219,9 +408,9 @@ git diffの変更されたコードのみをレビューします。
 
         ### 2. ファイル構成・パッケージ宣言・import の扱い
 
-        | 項番 | 項番タイトル | 行番号 | NGコード | NG理由 | 修正案 | 修正例 |
-        |:---|:---|:---|:---|:---|:---|:---|
-        | 2.3 | import の扱い | 7 | import java.math.BigDecimal;<br>import java.util.ArrayList;<br>import java.util.List;<br><br>import rpgtospa.common.validation.bldto.ErrorDataBlDto;<br>import lombok.Data;<br>import lombok.EqualsAndHashCode; | インポートの並び順規約（java.* → javax.* → 外部ライブラリ → 自作パッケージ）に違反しています。自作パッケージの import (rpgtospa.common.validation.bldto.ErrorDataBlDto) が外部ライブラリの lombok より前に配置されています（行7 が問題の開始位置）。 | 外部ライブラリ（lombok）を自作パッケージより前に並べ替えてください。グルーピングごとに空行を入れると可読性が向上します。 | package rpgtospa.common.exception;<br><br>import java.math.BigDecimal;<br>import java.util.ArrayList;<br>import java.util.List;<br><br>import lombok.Data;<br>import lombok.EqualsAndHashCode;<br><br>import rpgtospa.common.validation.bldto.ErrorDataBlDto; |
+        | 項番 | 項番タイトル | 行番号 | NGコード | NG理由 | 修正案 | 修正例 | 検出回数 |
+        |:---|:---|:---|:---|:---|:---|:---|:---|
+        | 2.3 | import の扱い | 7 | import java.math.BigDecimal;<br>import java.util.ArrayList;<br>import java.util.List;<br><br>import rpgtospa.common.validation.bldto.ErrorDataBlDto;<br>import lombok.Data;<br>import lombok.EqualsAndHashCode; | インポートの並び順規約（java.* → javax.* → 外部ライブラリ → 自作パッケージ）に違反しています。自作パッケージの import (rpgtospa.common.validation.bldto.ErrorDataBlDto) が外部ライブラリの lombok より前に配置されています（行7 が問題の開始位置）。 | 外部ライブラリ（lombok）を自作パッケージより前に並べ替えてください。グルーピングごとに空行を入れると可読性が向上します。 | package rpgtospa.common.exception;<br><br>import java.math.BigDecimal;<br>import java.util.ArrayList;<br>import java.util.List;<br><br>import lombok.Data;<br>import lombok.EqualsAndHashCode;<br><br>import rpgtospa.common.validation.bldto.ErrorDataBlDto; | 2/3 (66.7%) |
         ```
 - `issueDetectionThreshold` (オプション, デフォルト: 0.5): 偽陽性判定のしきい値 (0.0 - 1.0)
 
@@ -249,7 +438,58 @@ git diffの変更されたコードのみをレビューします。
 - `falsePositiveCheckIterations`: 偽陽性チェックの反復回数
 - `chapterFilePatterns` (オプション): 章ごとにレビュー対象ファイルを限定
 
-### 3. プロンプトとルール
+### 3. レビュー結果テンプレート
+
+レビュー結果の出力形式は、`templatesPath`に指定したテンプレートファイルでカスタマイズできます。テンプレートでは以下の変数が利用可能です。
+
+#### ファイルレベル変数
+- `{fileName}` - ファイル名（クリック可能なリンク）
+- `{filePath}` - ファイルの完全パス
+- `{diffDetails}` - Diff範囲の詳細（例: "main..feature"）
+- `{totalIssues}` - 全ルールセットの合計問題数
+
+#### ルールセットレベル変数
+- `{rulesetName}` - ルールセット名
+- `{issueCount}` - このルールセットの問題数
+- `{reviewedChapters}` - レビューした章のタイトル（カンマ区切り）
+
+#### チャプターレベル変数
+- `{chapterId}` - 章ID（例: "1", "2"）
+- `{chapterTitle}` - 章タイトル
+- `{reviewIterations}` - この章のレビュー回数
+- `{ngCount}` - この章で検出された問題数
+- `{ngRate}` - NG率（ngCount / reviewIterations）
+
+#### ルールレベル変数
+- `{ruleHeader}` - Markdownヘッダーレベル（例: "###", "####"）
+- `{ruleId}` - ルールID（例: "1.1", "2.3"）
+- `{ruleTitle}` - ルールタイトル
+
+#### 問題レベル変数
+- `{issueNumber}` - ルール内の問題番号（1, 2, 3, ...）
+- `{lineNumber}` - 問題が見つかった行番号
+- `{language}` - シンタックスハイライト用のプログラミング言語
+- `{codeSnippet}` - 問題のあるコードスニペット
+- `{reason}` - 問題の説明
+- `{suggestion}` - 修正案
+- `{fixedCodeSnippet}` - 修正後のコード例
+- `{detectionCount}` - この問題が検出された回数
+- `{detectionRate}` - 検出率（%）（detectionCount / reviewIterations × 100）
+
+#### テンプレート例
+
+```markdown
+### {chapterId}. {chapterTitle}
+
+#### {ruleId} {ruleTitle}
+- NG{issueNumber} : {lineNumber} (検出回数: {detectionCount}/{reviewIterations} ({detectionRate}%))
+    - NG理由: {reason}
+    - 修正案: {suggestion}
+```
+
+詳細は `.vscode/coding-rule-checker/review-results-template.md` のサンプルを参照してください。
+
+### 4. プロンプトとルール
 
 - **プロンプトテンプレート**: `system-prompt.md` など、AIへの指示を記述します。
 - **コーディングルール**: `rulesPath`に指定したディレクトリに、章ごとにMarkdownファイルとして記述します。
@@ -306,7 +546,28 @@ git diffの変更されたコードのみをレビューします。
 
 ## リリースノート
 
-### 0.1.0 - ベータ版リリース
+### 0.1.1 - 2025-01-XX
+
+#### 追加
+- テンプレート変数: レビュー統計情報をサポート
+  - `{reviewIterations}` - チャプターのレビュー回数
+  - `{ngCount}` - チャプターで検出されたNG数
+  - `{ngRate}` - NG率（ngCount / reviewIterations）
+  - `{detectionCount}` - 問題が検出された回数
+  - `{detectionRate}` - 検出率（%）
+
+#### 変更
+- テンプレート表示形式を改善: 検出回数の後に括弧内で検出率（%）を表示
+- テーブル形式から検出率の独立カラムを削除し、検出回数カラムに統合
+
+#### 修正
+- テンプレート変数が置換されずにそのまま出力される問題を修正
+- 変数置換ロジックを改善（チャプターレベル、ルールレベル、テーブルフォーマット）
+
+#### 削除
+- 拡張機能アクティブ化時の自動出力パネル表示を廃止
+
+### 0.1.0 - 2025-01-XX
 
 - 初期リリース
 

@@ -5,7 +5,6 @@ extension/node_modules/
 # Build outputs
 extension/dist/
 extension/out/
-*.vsix
 
 # TypeScript
 *.tsbuildinfo
