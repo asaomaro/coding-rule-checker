@@ -178,7 +178,8 @@ async function reviewChapter(
     chapterId: chapter.id,
     chapterTitle: chapter.title,
     ruleResults,
-    issues  // Keep for backward compatibility
+    issues,  // Keep for backward compatibility
+    reviewIterations
   };
 }
 

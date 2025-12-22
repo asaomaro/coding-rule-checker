@@ -16,8 +16,8 @@ export async function loadSettings(workspaceRoot: string): Promise<Settings> {
     const settings = JSON.parse(content) as Settings;
 
     // Validate required fields
-    if (!settings.model || !settings.systemPromptPath || !settings.summaryPromptPath) {
-      throw new Error('Missing required fields in settings.json (model, systemPromptPath, summaryPromptPath)');
+    if (!settings.systemPromptPath || !settings.summaryPromptPath) {
+      throw new Error('Missing required fields in settings.json (systemPromptPath, summaryPromptPath)');
     }
 
     if (!settings.ruleset) {

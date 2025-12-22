@@ -195,6 +195,65 @@ More specific guidance.
 - `###` (H3) = Individual rule
 - `####` (H4) = Sub-rule detail
 
+## Template Variables
+
+The review results template (`.vscode/coding-rule-checker/review-results-template.md`) supports various placeholders that are replaced with actual values during output generation.
+
+### File-Level Variables
+- `{fileName}` - File name (clickable link in output)
+- `{filePath}` - Full file path
+- `{diffDetails}` - Diff range details (e.g., "main..feature")
+- `{totalIssues}` - Total number of issues across all rulesets
+
+### Ruleset-Level Variables
+- `{rulesetName}` - Name of the ruleset
+- `{issueCount}` - Number of issues in this ruleset
+- `{reviewedChapters}` - Comma-separated list of reviewed chapter titles
+
+### Chapter-Level Variables
+- `{chapterId}` - Chapter ID (e.g., "1", "2")
+- `{chapterTitle}` - Chapter title
+- `{reviewIterations}` - Number of review iterations performed for this chapter
+- `{ngCount}` - Number of issues detected in this chapter
+- `{ngRate}` - NG rate (ngCount / reviewIterations)
+
+### Rule-Level Variables
+- `{ruleHeader}` - Markdown header level (e.g., "###" or "####")
+- `{ruleId}` - Rule ID (e.g., "1.1", "2.3")
+- `{ruleTitle}` - Rule title
+
+### Issue-Level Variables
+- `{issueNumber}` - Issue number within the rule (1, 2, 3, ...)
+- `{lineNumber}` - Line number where the issue was found
+- `{language}` - Programming language for syntax highlighting
+- `{codeSnippet}` - Code snippet with the issue
+- `{reason}` - Explanation of why this is an issue
+- `{suggestion}` - Suggested fix
+- `{fixedCodeSnippet}` - Fixed code example
+- `{detectionCount}` - Number of times this issue was detected across iterations
+- `{detectionRate}` - Detection rate as percentage (detectionCount / reviewIterations × 100)
+
+### Usage Example
+
+**Normal Format:**
+```markdown
+### {chapterId}. {chapterTitle}
+
+#### {ruleId} {ruleTitle}
+- NG{issueNumber} : {lineNumber} (検出回数: {detectionCount}/{reviewIterations} ({detectionRate}%))
+    - NG理由: {reason}
+    - 修正案: {suggestion}
+```
+
+**Table Format:**
+```markdown
+### {chapterId}. {chapterTitle}
+
+| 項番 | 行番号 | NG理由 | 検出回数 |
+|------|--------|--------|----------|
+| {ruleId} | {lineNumber} | {reason} | {detectionCount}/{reviewIterations} ({detectionRate}%) |
+```
+
 ## Configuration
 
 ### Global Settings (`.vscode/coding-rule-checker/settings.json`)

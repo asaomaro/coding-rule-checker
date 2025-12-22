@@ -108,6 +108,7 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
 
       // Build table rows for this chapter
       let tableRows = '';
+      const reviewIterations = chapter.reviewIterations || 1;
 
       for (const ruleResult of chapter.ruleResults) {
         if (!showRulesWithNoIssues && ruleResult.issues.length === 0) continue;
@@ -126,10 +127,14 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
             currentRow = currentRow.replace(/{reason}/g, '✅ No issues found');
             currentRow = currentRow.replace(/{suggestion}/g, '-');
             currentRow = currentRow.replace(/{fixedCodeSnippet}/g, '-');
+            currentRow = currentRow.replace(/{reviewIterations}/g, reviewIterations.toString());
+            currentRow = currentRow.replace(/{detectionCount}/g, '-');
+            currentRow = currentRow.replace(/{detectionRate}/g, '-');
             tableRows += currentRow + '\n';
           }
         } else {
           // Has issues - add rows for each issue
+
           for (const issue of ruleResult.issues) {
             let currentRow = tableRowTemplate;
 
@@ -139,6 +144,10 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
             const escapedSuggestion = issue.suggestion.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
             const escapedFixedCodeSnippet = (issue.fixedCodeSnippet || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
 
+            // Calculate detection statistics
+            const detectionCount = issue.detectionCount || 1;
+            const detectionRate = reviewIterations > 0 ? ((detectionCount / reviewIterations) * 100).toFixed(1) : '0.0';
+
             currentRow = currentRow.replace(/{ruleId}/g, isChapterLevelRule ? '-' : ruleResult.ruleId);
             currentRow = currentRow.replace(/{ruleTitle}/g, isChapterLevelRule ? '-' : ruleResult.ruleTitle);
             currentRow = currentRow.replace(/{lineNumber}/g, issue.lineNumber.toString());
@@ -146,6 +155,9 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
             currentRow = currentRow.replace(/{reason}/g, escapedReason);
             currentRow = currentRow.replace(/{suggestion}/g, escapedSuggestion);
             currentRow = currentRow.replace(/{fixedCodeSnippet}/g, escapedFixedCodeSnippet);
+            currentRow = currentRow.replace(/{reviewIterations}/g, reviewIterations.toString());
+            currentRow = currentRow.replace(/{detectionCount}/g, detectionCount.toString());
+            currentRow = currentRow.replace(/{detectionRate}/g, detectionRate);
 
             tableRows += currentRow + '\n';
           }
@@ -158,6 +170,14 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
       // Replace chapter-level placeholders
       currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
       currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
+
+      // Replace review statistics placeholders (reviewIterations already defined above)
+      const ngCount = chapter.ruleResults.reduce((sum, rule) => sum + rule.issues.length, 0);
+      const ngRate = reviewIterations > 0 ? (ngCount / reviewIterations).toFixed(2) : '0.00';
+
+      currentChapterSection = currentChapterSection.replace(/{reviewIterations}/g, reviewIterations.toString());
+      currentChapterSection = currentChapterSection.replace(/{ngCount}/g, ngCount.toString());
+      currentChapterSection = currentChapterSection.replace(/{ngRate}/g, ngRate);
 
       if (chapter.ruleResults.length === 0) {
         // Chapter has no rules at all - display message
@@ -321,6 +341,15 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
       currentChapterSection = currentChapterSection.replace(/{chapterId}/g, chapter.chapterId);
       currentChapterSection = currentChapterSection.replace(/{chapterTitle}/g, chapter.chapterTitle);
 
+      // Replace review statistics placeholders
+      const reviewIterations = chapter.reviewIterations || 1;
+      const ngCount = chapter.ruleResults.reduce((sum, rule) => sum + rule.issues.length, 0);
+      const ngRate = reviewIterations > 0 ? (ngCount / reviewIterations).toFixed(2) : '0.00';
+
+      currentChapterSection = currentChapterSection.replace(/{reviewIterations}/g, reviewIterations.toString());
+      currentChapterSection = currentChapterSection.replace(/{ngCount}/g, ngCount.toString());
+      currentChapterSection = currentChapterSection.replace(/{ngRate}/g, ngRate);
+
       // Build rule sections and chapter-level issues
       let ruleSections = '';
       let chapterLevelIssueSections = '';
@@ -358,6 +387,14 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
             currentIssueSection = replaceWithIndent(currentIssueSection, '{suggestion}', issue.suggestion);
             currentIssueSection = replaceWithIndent(currentIssueSection, '{fixedCodeSnippet}', issue.fixedCodeSnippet || '');
 
+            // Replace detection statistics placeholders
+            const detectionCount = issue.detectionCount || 1;
+            const detectionRate = reviewIterations > 0 ? ((detectionCount / reviewIterations) * 100).toFixed(1) : '0.0';
+
+            currentIssueSection = currentIssueSection.replace(/{reviewIterations}/g, reviewIterations.toString());
+            currentIssueSection = currentIssueSection.replace(/{detectionCount}/g, detectionCount.toString());
+            currentIssueSection = currentIssueSection.replace(/{detectionRate}/g, detectionRate);
+
             chapterLevelIssueSections += currentIssueSection + '\n';
           }
         } else {
@@ -384,6 +421,14 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
             currentIssueSection = replaceWithIndent(currentIssueSection, '{reason}', issue.reason);
             currentIssueSection = replaceWithIndent(currentIssueSection, '{suggestion}', issue.suggestion);
             currentIssueSection = replaceWithIndent(currentIssueSection, '{fixedCodeSnippet}', issue.fixedCodeSnippet || '');
+
+            // Replace detection statistics placeholders
+            const detectionCount = issue.detectionCount || 1;
+            const detectionRate = reviewIterations > 0 ? ((detectionCount / reviewIterations) * 100).toFixed(1) : '0.0';
+
+            currentIssueSection = currentIssueSection.replace(/{reviewIterations}/g, reviewIterations.toString());
+            currentIssueSection = currentIssueSection.replace(/{detectionCount}/g, detectionCount.toString());
+            currentIssueSection = currentIssueSection.replace(/{detectionRate}/g, detectionRate);
 
             issueSections += currentIssueSection + '\n';
           }

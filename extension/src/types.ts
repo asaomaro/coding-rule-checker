@@ -2,7 +2,7 @@
  * Main settings configuration
  */
 export interface Settings {
-  model: string;
+  model?: string;
   systemPromptPath: string;
   summaryPromptPath: string;
   ruleset: string | Record<string, string[]>; // Single ruleset name OR ruleset-to-file-patterns mapping
@@ -103,6 +103,7 @@ export interface ReviewIssue {
   reason: string;
   suggestion: string;
   fixedCodeSnippet?: string;
+  detectionCount?: number; // Number of times this issue was detected across iterations
 }
 
 /**
@@ -154,6 +155,7 @@ export interface ChapterReviewResult {
   chapterTitle: string;
   ruleResults: RuleReviewResult[];
   issues: ReviewIssue[]; // Deprecated: kept for backward compatibility, use ruleResults instead
+  reviewIterations?: number; // Number of review iterations performed for this chapter
 }
 
 /**

@@ -54,8 +54,5 @@ VSCodeでこのプロジェクトを開き、`F5`キーを押すと、拡張機�
 
 ## ドキュメント
 
-- [spec.md](spec.md) - 詳細仕様書（日本語）
 - [extension/README.md](extension/README.md) - 拡張機能のユーザー向けドキュメント
 - [docs/coding-rule.md](docs/coding-rule.md) - コーディングルール記述ガイド
-- [DEBUG-GUIDE.md](DEBUG-GUIDE.md) - デバッグガイド
-- [CLAUDE.md](CLAUDE.md) - AI開発ガイド (Claude向け)
