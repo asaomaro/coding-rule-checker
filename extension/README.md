@@ -366,8 +366,9 @@ git diffの変更されたコードのみをレビューします。
 - `ruleset` (必須): ルールセット設定
     - **シンプルモード（文字列）**: 単一のルールセット名
     - **アドバンスモード（オブジェクト）**: ルールセット名とファイルパターンのマッピング
-- `fileOutput`: ファイル出力設定
+- `fileOutput`: ファイル出力設定（常に有効）
 - `maxConcurrentReviews` (オプション, デフォルト: 10): 最大並列実行数
+- `maxRetries` (オプション, デフォルト: 3): Rate limitエラー時の最大リトライ回数
 - `showRulesWithNoIssues` (オプション, デフォルト: false): 指摘がないルールも表示するか
 - `outputFormat` (オプション, デフォルト: `"normal"`): レビュー結果の出力形式。
     - `"normal"`: 章とルールごとに階層的に結果を出力します。
@@ -546,6 +547,32 @@ git diffの変更されたコードのみをレビューします。
 
 ## リリースノート
 
+### 0.1.2 - 2025-01-XX
+
+#### 追加
+- `maxRetries` 設定を追加（デフォルト: 3）
+  - Rate limitエラー発生時のリトライ回数を設定可能に
+  - リトライ上限超過時に特別なNG issueを生成し、レビュー結果に含める
+  - チャット欄にリトライ設定を表示
+
+#### 変更
+- 並列実行制限の改善
+  - ConcurrencyQueueをシンプルなsemaphore実装に変更
+  - リトライロジックをキュー内部に統合し、スロット管理を改善
+  - リクエスト間の最小遅延を1000msに延長（Rate limit対策を強化）
+- ログ出力の改善
+  - キューイングログを状況変化時のみ出力に変更（ノイズ削減）
+  - "Rate limit delay"メッセージを"Applying delay between requests"に変更（誤解を防ぐ）
+- チャット出力を削除
+  - VSCodeフリーズ防止のため、詳細なレビュー結果のチャット出力を廃止
+  - チャット欄にはサマリー（総問題数、保存ファイルリンク）のみ表示
+  - 詳細な結果はファイル出力で確認
+
+#### 削除
+- `fileOutput.enabled` 設定を廃止
+  - ファイル出力は常に有効（設定不要）
+  - `settings.json`から`enabled`プロパティを削除
+
 ### 0.1.1 - 2025-01-XX
 
 #### 追加
@@ -607,6 +634,7 @@ MIT
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
   "maxConcurrentReviews": 20,
+  "maxRetries": 3,
   "showRulesWithNoIssues": true,
   "outputFormat": "table",
   "issueDetectionThreshold": 0.5,
@@ -615,7 +643,6 @@ MIT
     "sample-rule": ["*.java", "*.ts"]
   },
   "fileOutput": {
-    "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
   }

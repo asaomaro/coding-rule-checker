@@ -574,10 +574,6 @@ export async function saveUnifiedReviewResults(
     throw new Error('No review results to save');
   }
 
-  if (!settings.fileOutput.enabled) {
-    throw new Error('File output is not enabled');
-  }
-
   const outputDir = path.join(workspaceRoot, settings.fileOutput.outputDir);
   await fs.mkdir(outputDir, { recursive: true });
 

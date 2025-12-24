@@ -25,6 +25,11 @@ export async function performReviewIteration(
   queue: ConcurrencyQueue,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<ReviewIteration> {
+  // Log code content info
+  logger.log(`[performReviewIteration] File: ${code.fileName}, Chapter: ${chapter.id}, Iteration: ${iterationNumber}`);
+  logger.log(`[performReviewIteration] Code content length: ${code.content.length}`);
+  logger.log(`[performReviewIteration] Code content preview (first 200 chars): ${code.content.substring(0, 200)}`);
+
   // Build the review prompt
   const prompt = buildReviewPrompt(code, chapter, commonPrompt, reviewPrompt);
 
@@ -35,7 +40,7 @@ export async function performReviewIteration(
   ];
 
   // Progress is now handled at chapter level, not iteration level
-  logger.log(`\n=== Sending review request for chapter ${chapter.id}: ${chapter.title} (iteration ${iterationNumber}) ===`);
+  logger.log(`\n=== Sending review request: ${code.fileName} - Chapter ${chapter.id}: ${chapter.title} (Iteration ${iterationNumber}) ===`);
   logger.log('Model info:', { family: model.family, name: model.name, vendor: model.vendor });
   logger.log('System prompt length:', systemPrompt.length);
   logger.log('Review prompt length:', prompt.length);
@@ -43,18 +48,20 @@ export async function performReviewIteration(
   logger.log('Code content length:', code.content.length);
   logger.log('Code file name:', code.fileName);
 
+  // Log the actual messages being sent (truncated)
+  logger.log('Message[0] (System) preview:', messages[0].content.toString().substring(0, 200));
+  logger.log('Message[1] (Review) preview:', messages[1].content.toString().substring(0, 300));
+
   try {
-    // Execute LLM request through the queue
+    // Execute LLM request through the queue (retry logic is built into queue)
     const response = await queue.run(async () => {
-      logger.log('Calling model.sendRequest...');
+      logger.log(`Calling model.sendRequest...`);
       const startTime = Date.now();
       const result = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
       const requestTime = Date.now() - startTime;
       logger.log(`Request returned after ${requestTime}ms`);
       return result;
     });
-
-    const requestTime = Date.now();
 
     logger.log('Streaming response text...');
 
@@ -70,11 +77,12 @@ export async function performReviewIteration(
     }
 
     logger.log(`Response received. Total fragments: ${fragmentCount}, Total length: ${responseText.length}`);
+    logger.log(`Response for: ${code.fileName} - Chapter ${chapter.id} - Iteration ${iterationNumber}`);
     logger.log('Response preview (first 500 chars):', responseText.substring(0, 500));
     logger.log('Response preview (last 200 chars):', responseText.substring(Math.max(0, responseText.length - 200)));
 
     // Parse the response to extract issues
-    logger.log('Parsing response for issues...');
+    logger.log(`Parsing response for issues (${code.fileName}, Chapter ${chapter.id}, Iteration ${iterationNumber})...`);
 
     // If it's a diff, get addition line numbers to filter out deletion line issues
     let additionLineNumbers: number[] | undefined;
@@ -86,24 +94,49 @@ export async function performReviewIteration(
 
     const issues = parseReviewResponse(responseText, chapter.id, additionLineNumbers);
 
-    logger.log(`Parsed ${issues.length} issues`);
+    logger.log(`Parsed ${issues.length} issues for ${code.fileName} - Chapter ${chapter.id} - Iteration ${iterationNumber}`);
     if (issues.length > 0) {
       logger.log('First issue:', JSON.stringify(issues[0], null, 2));
       logger.log(`All issues: ${JSON.stringify(issues.map(i => ({ line: i.lineNumber, rule: i.ruleId })))}`);
     } else {
-      logger.log('WARNING: No issues found in response!');
-      logger.log('Full response for debugging:', responseText);
+      logger.log(`WARNING: No issues found in response for ${code.fileName} - Chapter ${chapter.id} - Iteration ${iterationNumber}!`);
+      if (responseText.length < 1000) {
+        logger.log('Full response for debugging:', responseText);
+      } else {
+        logger.log('Response too long, showing first 1000 chars:', responseText.substring(0, 1000));
+      }
     }
-    logger.log('=== Review request complete ===\n');
+    logger.log(`=== Review request complete for ${code.fileName} - Chapter ${chapter.id} - Iteration ${iterationNumber} ===\n`);
 
     return {
       issues,
       chapterId: chapter.id,
       iterationNumber
     };
-  } catch (error) {
-    logger.error('ERROR during review request:', error);
+  } catch (error: any) {
+    logger.error(`ERROR during review request for ${code.fileName} - Chapter ${chapter.id} - Iteration ${iterationNumber}:`, error);
     logger.error('Error details:', error instanceof Error ? error.message : String(error));
+
+    // If rate limit error, return a special NG issue indicating retry limit exceeded
+    if (error.name === 'ChatRateLimited') {
+      logger.error(`RATE LIMIT ERROR: ${code.fileName} - Chapter ${chapter.id} - Iteration ${iterationNumber} - Max retries exceeded`);
+
+      return {
+        issues: [{
+          ruleId: `${chapter.id}.ERROR`,
+          ruleTitle: 'Rate Limit Error',
+          lineNumber: 0,
+          codeSnippet: '',
+          reason: `レビューリクエストがRate Limit制限を超えました。リトライ上限に達したため、このチャプターのレビューを完了できませんでした。設定でmaxRetriesを増やすか、maxConcurrentReviewsを減らしてください。`,
+          suggestion: 'settings.jsonでmaxRetriesを増やす、またはmaxConcurrentReviewsを減らしてリトライしてください。',
+          fixedCodeSnippet: ''
+        }],
+        chapterId: chapter.id,
+        iterationNumber
+      };
+    }
+
+    // For other errors, return empty issues
     return {
       issues: [],
       chapterId: chapter.id,
@@ -116,6 +149,9 @@ export async function performReviewIteration(
  * Builds the review prompt with code and rules
  */
 function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, commonPrompt: string, reviewPromptTemplate: string): string {
+  logger.log(`[buildReviewPrompt] Building prompt for ${code.fileName}, Chapter ${chapter.id}`);
+  logger.log(`[buildReviewPrompt] Original code content length: ${code.content.length}`);
+
   let codeContent = code.content;
 
   // If it's a diff, format with diff symbols and line numbers
@@ -176,6 +212,18 @@ function buildReviewPrompt(code: CodeToReview, chapter: RuleChapter, commonPromp
   if (commonPrompt) {
     prompt = `${commonPrompt}\n\n${prompt}`;
   }
+
+  logger.log(`[buildReviewPrompt] Final prompt length: ${prompt.length}`);
+  logger.log(`[buildReviewPrompt] Formatted code content length: ${codeContent.length}`);
+  logger.log(`[buildReviewPrompt] Code content preview (first 300 chars): ${codeContent.substring(0, 300)}`);
+
+  // Check if code content is actually in the final prompt
+  const codeInPrompt = prompt.includes(codeContent.substring(0, 100));
+  logger.log(`[buildReviewPrompt] Code content is in final prompt: ${codeInPrompt}`);
+
+  // Log a sample of the final prompt to verify structure
+  const promptSample = prompt.length > 1000 ? prompt.substring(0, 500) + '\n...\n' + prompt.substring(prompt.length - 500) : prompt;
+  logger.log(`[buildReviewPrompt] Final prompt sample:\n${promptSample}`);
 
   return prompt;
 }
