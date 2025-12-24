@@ -2,7 +2,7 @@
   "name": "coding-rule-checker",
   "displayName": "Coding Rule Checker",
   "description": "A VSCode extension that performs static code analysis based on coding rules written in Markdown format",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "asaomaro",
   "author": { 
     "name": "s.asao"

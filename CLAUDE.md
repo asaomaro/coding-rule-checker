@@ -8,12 +8,13 @@ Coding Rule Checker is a VSCode extension that performs static code analysis bas
 
 **Key Features:**
 - **Multiple Ruleset Support**: Apply different rulesets to different file types using pattern matching
-- **Parallel Processing**: Files, rulesets, chapters, and iterations are all parallelized
+- **Parallel Processing**: Files, rulesets, chapters, and iterations are all parallelized with configurable concurrency limits
 - **Duplicate Removal**: Automatically deduplicates issues with same ruleId + lineNumber
 - **Threshold-based Filtering**: Configurable threshold to reduce false positives
-- **Flexible Output**: Supports both hierarchical and table output formats
+- **Flexible Output**: File-based output (always enabled) with hierarchical and table formats; chat shows summary only
 - **Chapter Filtering**: Review specific chapters only for matching file patterns
 - **GitHub Integration**: Review code from local files, git diffs, or GitHub repositories
+- **Rate Limit Handling**: Automatic retry with exponential backoff and configurable retry limits
 
 ## Development Commands
 
@@ -174,8 +175,8 @@ All types defined in `types.ts`:
 6. **Format output**:
    - Apply `outputFormat` setting ("normal" or "table")
    - Apply `showRulesWithNoIssues` setting
-   - Display in Copilot Chat
-   - Optionally save to file (if `fileOutput.enabled` is true)
+   - Save to file (always enabled)
+   - Display summary in Copilot Chat (detailed results only in files)
 
 ## Rule File Format
 
@@ -265,11 +266,11 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "maxConcurrentReviews": 10,
+  "maxRetries": 3,
   "showRulesWithNoIssues": false,
   "ruleset": "typescript-rules",
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
   "fileOutput": {
-    "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
   }
@@ -283,6 +284,7 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "maxConcurrentReviews": 10,
+  "maxRetries": 3,
   "showRulesWithNoIssues": false,
   "ruleset": {
     "common": ["*.java", "*.html"],
@@ -291,7 +293,6 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
   },
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
   "fileOutput": {
-    "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
   }
@@ -304,6 +305,10 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
   - Higher values = faster reviews but may hit API rate limits
   - Lower values = slower reviews but more stable
   - Recommended: 5-15 depending on your API plan
+- `maxRetries` (optional, default: 3): Maximum number of retries on rate limit errors
+  - When a rate limit error occurs, the system will retry the request with exponential backoff (1s, 2s, 4s, 8s...)
+  - If retries are exhausted, a special NG issue will be created indicating the retry limit was exceeded
+  - Recommended: 3-5 depending on your API rate limits
 - `showRulesWithNoIssues` (optional, default: false): Show rule sections with no issues in output
 - `outputFormat` (optional, default: "normal"): Output format for review results
   - `"normal"`: Standard hierarchical format with chapters and rules
@@ -383,7 +388,10 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
 ### Error Handling
 - Configuration errors reported with helpful messages
 - Missing files, invalid JSON, or missing required fields throw descriptive errors
-- Review errors displayed in chat stream
+- Rate limit errors: Automatic retry with exponential backoff (1s, 2s, 4s, 8s...)
+  - Configurable retry limit via `maxRetries` setting (default: 3)
+  - If retry limit exceeded, a special NG issue is created indicating the error
+  - Error details saved to review output file
 
 ## Requirements
 
@@ -391,3 +399,50 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
 - GitHub Copilot subscription
 - Node.js 20+ (development)
 - `gh` CLI (for GitHub integration features)
+
+## Release Notes
+
+### Version 0.1.2 - 2025-01-XX
+
+#### Added
+- `maxRetries` setting (default: 3)
+  - Configure maximum retry attempts on rate limit errors
+  - Retry limit exceeded creates a special NG issue in review output
+  - Chat displays retry configuration on startup
+
+#### Changed
+- Improved parallel execution control
+  - Simplified ConcurrencyQueue to semaphore-based implementation
+  - Integrated retry logic inside queue for better slot management
+  - Increased minimum delay between requests to 1000ms (enhanced rate limit protection)
+- Improved logging
+  - Queue logs only on state changes (reduced noise)
+  - Changed "Rate limit delay" to "Applying delay between requests" (clearer messaging)
+- Removed detailed chat output
+  - Prevents VSCode freezing on large review results
+  - Chat shows only summary (total issues, file links)
+  - Detailed results available in file output only
+
+#### Removed
+- `fileOutput.enabled` setting
+  - File output always enabled (no configuration needed)
+  - Removed `enabled` property from `settings.json`
+
+### Version 0.1.1 - 2025-01-XX
+
+#### Added
+- Template variables for review statistics
+- Detection count and rate tracking
+
+#### Changed
+- Improved template format and variable substitution
+
+#### Fixed
+- Template variable replacement issues
+
+#### Removed
+- Auto-display of output panel on extension activation
+
+### Version 0.1.0 - 2025-01-XX
+
+- Initial release

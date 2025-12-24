@@ -28,7 +28,7 @@ import {
   formatUnifiedReviewResults,
   saveUnifiedReviewResults
 } from './outputFormatter';
-import { ReviewRequest, CodeToReview, RuleChapter, Settings, RuleSettings } from './types';
+import { ReviewRequest, CodeToReview, RuleChapter, Settings, RuleSettings, ReviewResult } from './types';
 import { ConcurrencyQueue } from './concurrencyQueue';
 import * as logger from './logger';
 
@@ -188,10 +188,14 @@ async function handleChatRequest(
   // Load system prompt
   const systemPrompt = await loadPromptTemplate(workspaceRoot, settings.systemPromptPath);
 
-  // Create concurrency queue
+  // Create concurrency queue with rate limiting
   const maxConcurrent = settings.maxConcurrentReviews || 10;
-  const queue = new ConcurrencyQueue(maxConcurrent);
+  const minDelayMs = 1000; // 1000ms minimum delay between requests to avoid rate limiting
+  const maxRetries = settings.maxRetries ?? 3;
+  const queue = new ConcurrencyQueue(maxConcurrent, minDelayMs, maxRetries);
   stream.markdown(`⚙️ Max concurrent reviews: ${maxConcurrent}\n`);
+  stream.markdown(`⏱️ Minimum delay between requests: ${minDelayMs}ms\n`);
+  stream.markdown(`🔁 Max retries on rate limit: ${maxRetries}\n`);
 
   // Display output format and issue detection threshold
   const outputFormat = settings.outputFormat || 'normal';
@@ -253,10 +257,17 @@ async function handleChatRequest(
   stream.markdown(`📋 Total review tasks: ${reviewTasks.length} (files × rulesets)\n`);
   stream.markdown(`🚀 Starting parallel review with max ${maxConcurrent} concurrent requests...\n\n`);
 
+  // Load template once for all file outputs
+  const template = await loadPromptTemplate(workspaceRoot, settings.templatesPath);
+
+  // Track output files for summary
+  const outputPaths: string[] = [];
+
   // Execute all review tasks in parallel (queue will handle concurrency limits)
   const allResults = await Promise.all(
     reviewTasks.map(async ({ code, rulesetName }) => {
       logger.log(`[Review] Starting: ${code.fileName} × ${rulesetName}`);
+      logger.log(`[Review] Code object ID: ${code.fileName} (${code.filePath})`);
 
       // Load ruleset settings
       const ruleSettings = await loadRuleSettings(workspaceRoot, rulesetName);
@@ -338,58 +349,71 @@ async function handleChatRequest(
         }
       );
 
-      logger.log(`[Review] Completed: ${code.fileName} × ${rulesetName}`);
+      logger.log(`[Review] Completed: ${code.fileName} × ${rulesetName} - Issues: ${result.totalIssues}`);
+      logger.log(`[Review] Result details: fileName=${result.fileName}, rulesetName=${result.rulesetName}, totalIssues=${result.totalIssues}`);
+
       return result;
     })
   );
 
   // Filter out null results
-  const validResults = allResults.filter(r => r !== null);
+  const validResults: ReviewResult[] = allResults.filter((r): r is ReviewResult => r !== null);
 
-  // Output unified results to chat
-  if (validResults.length > 0) {
-    stream.markdown('\n\n## 📊 Review Results\n\n');
-
-    const showRulesWithNoIssues = settings.showRulesWithNoIssues || false;
-
-    for (const result of validResults) {
-      stream.markdown(`### ${result.rulesetName}\n`);
-      stream.markdown(formatForChat(result, showRulesWithNoIssues));
-    }
-
-    // Calculate totals
-    const totalIssuesAll = validResults.reduce((sum, r) => sum + r.totalIssues, 0);
-    stream.markdown(`\n**Total issues found: ${totalIssuesAll}**\n`);
-
-    // Load template
-    const template = await loadPromptTemplate(workspaceRoot, settings.templatesPath);
-
-    // Save unified results to file if enabled and workspace is open
-    if (isWorkspaceOpen && settings.fileOutput.enabled) {
-      try {
-        logger.log('Attempting to save unified review results...');
-        const outputPath = await saveUnifiedReviewResults(validResults, settings, workspaceRoot, template);
-        logger.log('Review results saved successfully to:', outputPath);
-        const fileUri = vscode.Uri.file(outputPath).toString();
-        stream.markdown(`\n💾 Review results saved to: [${path.basename(outputPath)}](${fileUri})\n`);
-      } catch (error) {
-        logger.error('Failed to save review results:', error);
-        stream.markdown(`\n⚠️ Failed to save review results: ${error instanceof Error ? error.message : String(error)}\n`);
-      }
-    } else {
-      if (!isWorkspaceOpen) {
-        logger.log('File output skipped: No workspace open');
-      } else if (!settings.fileOutput.enabled) {
-        logger.log('File output skipped: Disabled in settings');
-      }
-    }
-
-    // Show detailed results
-    stream.markdown('\n---\n\n## 📋 Detailed Results\n\n');
-    stream.markdown(formatUnifiedReviewResults(validResults, template, showRulesWithNoIssues, outputFormat));
+  // Log all results for debugging
+  logger.log(`[Review] All results count: ${allResults.length}`);
+  logger.log(`[Review] Valid results count: ${validResults.length}`);
+  for (let i = 0; i < validResults.length; i++) {
+    const result = validResults[i];
+    logger.log(`[Review] Result[${i}]: ${result.fileName} × ${result.rulesetName} - ${result.totalIssues} issues`);
   }
 
-  stream.markdown('\n\n✅ Review completed!\n');
+  // Save results to files (no chat output to prevent VSCode freeze)
+  if (validResults.length > 0 && isWorkspaceOpen) {
+    try {
+      logger.log('Saving review results to files...');
+
+      // Group results by fileName (each file gets its own output file)
+      const resultsByFile = new Map<string, ReviewResult[]>();
+      for (const result of validResults) {
+        if (!resultsByFile.has(result.fileName)) {
+          resultsByFile.set(result.fileName, []);
+        }
+        resultsByFile.get(result.fileName)!.push(result);
+      }
+
+      logger.log(`Saving ${resultsByFile.size} output file(s)...`);
+
+      // Save each file's results as it completes
+      for (const [fileName, fileResults] of resultsByFile.entries()) {
+        logger.log(`Saving results for: ${fileName}`);
+        const outputPath = await saveUnifiedReviewResults(fileResults, settings, workspaceRoot, template);
+        outputPaths.push(outputPath);
+        logger.log(`Results saved to: ${outputPath}`);
+      }
+
+      // Calculate totals
+      const totalIssuesAll = validResults.reduce((sum, r) => sum + r.totalIssues, 0);
+
+      // Display summary with file links only
+      stream.markdown(`\n\n## ✅ Review Completed\n\n`);
+      stream.markdown(`**Total issues found: ${totalIssuesAll}**\n\n`);
+      stream.markdown(`💾 Results saved to ${outputPaths.length} file(s):\n`);
+      for (const outputPath of outputPaths) {
+        const fileUri = vscode.Uri.file(outputPath).toString();
+        stream.markdown(`  - [${path.basename(outputPath)}](${fileUri})\n`);
+      }
+    } catch (error) {
+      logger.error('Failed to save review results:', error);
+      stream.markdown(`\n⚠️ Failed to save review results: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  } else {
+    if (!isWorkspaceOpen) {
+      stream.markdown('\n\n⚠️ No workspace open - cannot save results\n');
+      logger.log('File output skipped: No workspace open');
+    } else {
+      stream.markdown('\n\n✅ Review completed (no issues found)\n');
+    }
+  }
 }
 
 /**

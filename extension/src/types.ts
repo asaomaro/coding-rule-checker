@@ -10,10 +10,10 @@ export interface Settings {
   templatesPath: string;
   showRulesWithNoIssues?: boolean;
   maxConcurrentReviews?: number;
+  maxRetries?: number; // Maximum number of retries on rate limit error (default: 3)
   outputFormat?: 'normal' | 'table'; // Output format: 'normal' (default) or 'table'
   issueDetectionThreshold?: number; // Threshold for issue detection (0.00-1.00). 0=all iterations, 1=at least once, 0.5=majority (default: 0.5)
   fileOutput: {
-    enabled: boolean;
     outputDir: string;
     outputFileName: string;
   };

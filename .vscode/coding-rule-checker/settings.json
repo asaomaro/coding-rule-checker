@@ -3,7 +3,8 @@
   "systemPromptPath": ".vscode/coding-rule-checker/system-prompt.md",
   "summaryPromptPath": ".vscode/coding-rule-checker/summary-prompt.md",
   "templatesPath": ".vscode/coding-rule-checker/review-results-template.md",
-  "maxConcurrentReviews": 20,
+  "maxConcurrentReviews": 3,
+  "maxRetries": 3,
   "showRulesWithNoIssues": true,
   "outputFormat": "normal",
   "issueDetectionThreshold": 0.5,
@@ -12,7 +13,6 @@
     "sample-rule": ["*.java"]
   },
   "fileOutput": {
-    "enabled": true,
     "outputDir": ".vscode/coding-rule-checker/review-results",
     "outputFileName": "reviewed_{originalFileName}.md"
   }
