@@ -36,12 +36,12 @@ function replaceWithIndent(text: string, placeholder: string, replacement: strin
 }
 
 /**
- * Converts a file path to a clickable Markdown link
+ * Converts a file path to a clickable HTML link
  */
 function filePathToLink(filePath: string, fileName: string): string {
   // Use file:// protocol for absolute paths
   const fileUri = filePath.startsWith('http') ? filePath : `file:///${filePath.replace(/\\/g, '/')}`;
-  return `[${fileName}](${fileUri})`;
+  return `<a href="${fileUri}">${fileName}</a>`;
 }
 
 /**
@@ -59,6 +59,11 @@ function formatUnifiedReviewResultsAsTable(results: ReviewResult[], template: st
   output = output.replace(/{fileName}/g, filePathToLink(firstResult.filePath, firstResult.fileName));
   output = output.replace(/{filePath}/g, firstResult.filePath);
   output = output.replace(/{diffDetails}/g, firstResult.diffDetails || '');
+
+  // Remove the "Diff Details" line if it's empty (not a diff review)
+  if (!firstResult.diffDetails) {
+    output = output.replace(/^- \*\*Diff Details\*\*:.*$\n?/gm, '');
+  }
 
   // Calculate total issues
   const totalIssuesAll = results.reduce((sum, r) => sum + r.totalIssues, 0);
@@ -270,6 +275,11 @@ export function formatUnifiedReviewResults(results: ReviewResult[], template: st
   output = output.replace(/{fileName}/g, filePathToLink(firstResult.filePath, firstResult.fileName));
   output = output.replace(/{filePath}/g, firstResult.filePath);
   output = output.replace(/{diffDetails}/g, firstResult.diffDetails || '');
+
+  // Remove the "Diff Details" line if it's empty (not a diff review)
+  if (!firstResult.diffDetails) {
+    output = output.replace(/^- \*\*Diff Details\*\*:.*$\n?/gm, '');
+  }
 
   // Calculate total issues
   const totalIssuesAll = results.reduce((sum, r) => sum + r.totalIssues, 0);

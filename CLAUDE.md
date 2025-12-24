@@ -402,6 +402,13 @@ The review results template (`.vscode/coding-rule-checker/review-results-templat
 
 ## Release Notes
 
+### Version 0.1.3 - 2025-01-XX
+
+#### Changed
+- Improved output formatting
+  - Hide "Diff Details" section when not performing a diff review
+  - File name links now use HTML anchor tags instead of Markdown format for better clickability
+
 ### Version 0.1.2 - 2025-01-XX
 
 #### Added
